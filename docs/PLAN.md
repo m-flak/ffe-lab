@@ -61,9 +61,17 @@ solves a real problem in ffelab. Keep SQLite as a zero-setup "lite mode".
 - Long experiment runs as durable workflows: an emulator crash or hang retries
   from the last save state instead of losing the campaign. Activities: load
   state, logging pass, halt, knockout; each idempotent and recorded.
-- Temporal chosen (D11). First: unique run keys on experiments so retries
-  never double-count evidence; then heartbeating activities and a campaign
-  workflow that takes human answers as signals.
+- Temporal chosen (D11).
+- **Status: built** (`src/ffelab/workflows/`, `python -m ffelab.workflows`).
+  Steps are retry-safe through run keys (`campaign_steps` table); harness
+  failures retry on a fresh backend, hangs time out on missing heartbeats, bugs
+  and unknown save states fail once; steer with pause/resume/stop/add_steps.
+  Tested on the fake backend against a real Temporal dev server.
+- Remaining: make each experiment's ledger writes one transaction (today a
+  crash mid-evidence shows up as a `partial` step); restart QEMU, not just
+  reconnect, when a retry follows a hang; human-question signals once the
+  orchestrator's question queue exists (item 2); first campaign on the real
+  emulator.
 
 ---
 

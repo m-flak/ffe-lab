@@ -85,8 +85,10 @@ Temporal as lite mode.
   sync task blocked on a socket.
 - *A campaign is an agent loop,* branching on results and waiting on human
   answers (signals/updates), not a fixed batch that re-runs with cached steps.
-- *One emulator, one experiment at a time:* one worker per emulator task queue
-  with `max_concurrent_activities=1`; more emulators means more queues.
+- *One emulator, one experiment at a time:* one worker per emulator task queue,
+  and the workflow awaits each step before the next; more emulators means more
+  queues. (The worker keeps a few activity slots so a retry can start while a
+  hung attempt's thread is still stuck.)
 - Pydantic models (plan item 1) pass through `temporalio.contrib.pydantic`.
 - *Costs:* a local server (`temporal server start-dev --db-filename ...`,
   SQLite-backed), determinism rules in workflow code (no I/O, clock or random:

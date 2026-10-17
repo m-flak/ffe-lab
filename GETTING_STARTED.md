@@ -321,14 +321,39 @@ Ask for it in one go:
 > "FUNC 10 is a mystery. Fingerprint it, find which tag it responds to, knock it
 > out in the scenario where it's most active, and show me the diff."
 
+### Long runs: durable campaigns (optional)
+
+For runs of hundreds of experiments, let Temporal drive them so an emulator
+crash or hang retries from the save state instead of losing the run (D11):
+
+```bash
+pip install -e '.[durable]'
+brew install temporal
+temporal server start-dev --db-filename campaigns.db        # web UI: http://localhost:8233
+python -m ffelab.workflows worker --db ffe.db --backend qemu --emu '{"code_base": 0}'   # your calibrated code_base (Stage 2)
+python -m ffelab.workflows start plan.json                  # in another terminal
+python -m ffelab.workflows status NAME                      # or pause / resume / stop
+```
+
+`plan.json` lists steps, or lets the campaign pick its own targets:
+
+```json
+{"name": "orbit-sweep",
+ "steps": [{"kind": "knockout", "scenario": "orbit_atmo", "funcs": [10]}],
+ "auto":  [{"kind": "logging_pass", "scenario": "orbit_atmo", "count": 40,
+            "context": ["near_planet", "atmosphere"]}]}
+```
+
+Try it first with `--backend fake --emu '{"truth": {"orbit_atmo": {"10": 1.0}}}'`.
+
 ---
 
 ## 7. What's not built yet
 
 Be aware of these so they don't surprise you:
 
-- **The rest of the AI-engineering stack** (Agent SDK + tracing,
-  Temporal/Prefect) — see `docs/PLAN.md`. Pydantic + evals and Postgres are built.
+- **The rest of the AI-engineering stack** (Agent SDK + tracing) — see
+  `docs/PLAN.md`. Pydantic + evals, Postgres and Temporal campaigns are built.
 - **A batched question queue** — the agent asks as it goes (comes with the Agent SDK step).
 - **A built-FFED3D backend** (linker-map symbols, compile-time counters) — optional.
 - **Call-site, return-value and data knockouts** — only whole-function knockouts exist.
