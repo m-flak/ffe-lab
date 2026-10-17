@@ -32,6 +32,14 @@
       turn a measured run into gate thresholds
   ffelab eval compare REPORT.json [REPORT.json ...] [--split test]
       side-by-side table of runs (models, prompts, solvers)
+  ffelab agents run [--db ffe.db] [--backend fake|qemu|dosbox-x] [--worker claude|heuristic]
+                    [--model M] [--effort LEVEL] [--rounds N] [--max-usd X] [--max-minutes M]
+                    [--blind N] [--attacks N] [--trace phoenix|langfuse|otlp|console|none] [--out REPORT.json]
+      run the orchestrator: blind labeller + red team workers under a budget
+  ffelab agents questions [--db ffe.db] [--all]
+      the batched questions agents and contradictions have queued for you
+  ffelab agents answer ID TEXT [--claim LABEL --confidence P] [--close explained|claim_withdrawn]
+  ffelab agents dismiss ID
 
 --db takes a SQLite file or a postgresql:// URL, and defaults to $FFELAB_DB, else ffe.db.
 """
@@ -161,9 +169,34 @@ def main(argv=None):
     eb.add_argument("--split", default="all")
     ec = ev.add_parser("compare"); ec.add_argument("reports", nargs="+", type=Path)
     ec.add_argument("--split", default="all")
+    ag = sub.add_parser("agents").add_subparsers(dest="agents_cmd", required=True)
+    ar = ag.add_parser("run"); ar.add_argument("--db", default="ffe.db", type=Path)
+    ar.add_argument("--backend", default="fake", choices=["fake", "qemu", "dosbox-x"])
+    ar.add_argument("--worker", default="claude", choices=["claude", "heuristic"])
+    ar.add_argument("--model", default=None)
+    ar.add_argument("--effort", default=None, choices=["low", "medium", "high", "xhigh", "max"])
+    ar.add_argument("--rounds", type=int, default=10); ar.add_argument("--max-usd", type=float, default=5.0)
+    ar.add_argument("--max-tokens", type=int, default=None); ar.add_argument("--max-minutes", type=float, default=60)
+    ar.add_argument("--worker-max-usd", type=float, default=0.5); ar.add_argument("--worker-max-turns", type=int, default=12)
+    ar.add_argument("--max-questions", type=int, default=10)
+    ar.add_argument("--blind", type=int, default=4, help="blind labels per round")
+    ar.add_argument("--attacks", type=int, default=2, help="red-team targets per round")
+    ar.add_argument("--concurrency", type=int, default=4)
+    ar.add_argument("--trace", default="none", choices=["phoenix", "langfuse", "otlp", "console", "none"])
+    ar.add_argument("--out", type=Path)
+    aq = ag.add_parser("questions"); aq.add_argument("--db", default="ffe.db", type=Path)
+    aq.add_argument("--all", action="store_true", help="include answered and dismissed")
+    aa = ag.add_parser("answer"); aa.add_argument("id", type=int); aa.add_argument("text")
+    aa.add_argument("--db", default="ffe.db", type=Path)
+    aa.add_argument("--claim", help="also assert this label for the question's function (an opinion)")
+    aa.add_argument("--confidence", type=float)
+    aa.add_argument("--close", choices=["explained", "claim_withdrawn"], help="close the contradiction asked about")
+    ad = ag.add_parser("dismiss"); ad.add_argument("id", type=int); ad.add_argument("--db", default="ffe.db", type=Path)
     a = ap.parse_args(argv)
     if a.cmd == "eval":
         return eval_cmd(a)
+    if a.cmd == "agents":
+        return agents_cmd(a)
     if a.cmd == "build":
         r = build(a.src, a.db, a.out, a.docs)
         print(json.dumps(r["report"], indent=2))
@@ -258,6 +291,61 @@ def eval_cmd(a) -> int:
     if a.eval_cmd == "compare":
         reps = [runner.EvalReport.model_validate_json(p.read_text()) for p in a.reports]
         print(runner.compare(reps, a.split))
+        return 0
+    return 2
+
+
+def agents_cmd(a) -> int:
+    from .orchestrator import questions as qs
+    led = Ledger(dbmod.connect(a.db))
+    qs.ensure_schema(led.con)
+    if a.agents_cmd == "run":
+        from .harness.factory import make_backend
+        from .orchestrator import tracing
+        from .orchestrator.budget import Budget
+        from .orchestrator.orchestrator import Orchestrator, run
+        from .orchestrator.workers import ClaudeWorker, HeuristicWorker
+        budget = Budget(max_usd=a.max_usd, max_tokens=a.max_tokens, max_seconds=a.max_minutes * 60,
+                        max_rounds=a.rounds, worker_max_turns=a.worker_max_turns,
+                        worker_max_usd=a.worker_max_usd, max_open_questions=a.max_questions)
+        if a.worker == "claude":
+            from .evals.solvers import DEFAULT_MODEL
+            worker = ClaudeWorker(led, a.model or DEFAULT_MODEL, a.effort)
+        else:
+            worker = HeuristicWorker(led)
+        provider = tracing.setup(a.trace)
+        try:
+            rep = run(Orchestrator(led, make_backend(a.backend, led.con), worker, budget, a.blind, a.attacks,
+                                   a.concurrency, progress=lambda m: print(m, flush=True)))
+        finally:
+            tracing.shutdown(provider)
+        s = rep.spend
+        print(f"stopped: {rep.stop} after {len(rep.rounds)} rounds; ${s.usd:.2f}, "
+              f"{s.input_tokens} in / {s.output_tokens} out tokens, {s.workers} workers ({s.failed_workers} failed)")
+        if rep.open_questions:
+            print(f"{len(rep.open_questions)} questions waiting: ffelab agents questions")
+        if a.out:
+            a.out.parent.mkdir(parents=True, exist_ok=True)
+            a.out.write_text(rep.model_dump_json(indent=1))
+            print(f"report: {a.out}")
+        return 0
+    if a.agents_cmd == "questions":
+        rows = qs.all_questions(led.con) if a.all else qs.open_questions(led.con)
+        for q in rows:
+            func = f" FUNC {q.func}" if q.func is not None else ""
+            print(f"[{q.id}] {q.kind}{func} ({q.source}, {q.status}): {q.question}")
+            if q.answer:
+                print(f"     answer: {q.answer}")
+        if not rows:
+            print("no questions waiting")
+        return 0
+    if a.agents_cmd == "answer":
+        q = qs.answer(led, a.id, a.text, a.claim, a.confidence, a.close)
+        print(f"[{q.id}] answered")
+        return 0
+    if a.agents_cmd == "dismiss":
+        qs.dismiss(led.con, a.id)
+        print(f"[{a.id}] dismissed")
         return 0
     return 2
 

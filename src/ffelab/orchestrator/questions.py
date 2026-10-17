@@ -1,0 +1,147 @@
+"""The batched question queue: what the agents need from the human.
+
+Agents don't stop and wait every time they want a human's view. Questions go
+into a queue in ``ffe.db``; the orchestrator keeps working on everything else
+and stops once enough are waiting (``Budget.max_open_questions``), so the
+human answers a batch at a time (``ffelab agents questions`` / ``answer``).
+
+Two sources:
+
+* **contradictions**: an experiment disagrees with a confident claim. The
+  ledger rules say these get reviewed by a person, so every open one is queued.
+* **agents**: a worker calls ``ask_human`` when only a person can settle
+  something (what a scenario shows, whether a save state is broken, ...).
+
+An answer is recorded as text. It is not evidence: a label the human wants to
+assert goes in as an ordinary claim (``--claim``), which only experiments can
+settle, and a contradiction is closed explicitly (``--close``).
+
+The table lives here rather than in ``db.py`` so the orchestrator owns its own
+schema; ``ensure_schema`` is idempotent.
+"""
+from __future__ import annotations
+
+import json
+import sqlite3
+from datetime import datetime
+from typing import Any, Literal
+
+from pydantic import Field
+
+from ..ledger import Ledger
+from ..models import FuncNum, Model, Record
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS agent_questions (
+    id INTEGER PRIMARY KEY,
+    source TEXT NOT NULL,          -- who asked: 'ledger' for contradictions, else the worker
+    kind TEXT NOT NULL,            -- contradiction | agent
+    func INTEGER,
+    question TEXT NOT NULL,
+    context TEXT,                  -- JSON
+    dedupe_key TEXT UNIQUE,        -- the same question is queued once
+    status TEXT NOT NULL DEFAULT 'open',   -- open | answered | dismissed
+    answer TEXT,
+    created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    answered TIMESTAMP
+);
+"""
+
+QuestionKind = Literal["contradiction", "agent"]
+QuestionStatus = Literal["open", "answered", "dismissed"]
+
+
+class QuestionDraft(Model):
+    """What a worker sends through ``ask_human``."""
+    question: str = Field(min_length=1, description="One specific question a person can answer.")
+    func: FuncNum | None = Field(None, description="The function it is about, if any.")
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
+class Question(Record):
+    table = "agent_questions"
+    _json = ("context",)
+    id: int
+    source: str
+    kind: QuestionKind
+    func: FuncNum | None = None
+    question: str
+    context: dict[str, Any] | None = None
+    dedupe_key: str | None = None
+    status: QuestionStatus = "open"
+    answer: str | None = None
+    created: datetime | None = None
+    answered: datetime | None = None
+
+
+def ensure_schema(con: sqlite3.Connection) -> None:
+    con.executescript(SCHEMA)
+
+
+def ask(con: sqlite3.Connection, source: str, kind: QuestionKind, question: str,
+        func: int | None = None, context: dict | None = None, dedupe_key: str | None = None) -> int | None:
+    """Queue a question. Returns its id, or None if the same question is already queued."""
+    cur = con.execute(
+        "INSERT OR IGNORE INTO agent_questions (source, kind, func, question, context, dedupe_key)"
+        " VALUES (?,?,?,?,?,?)",
+        (source, kind, func, question, json.dumps(context or {}), dedupe_key))
+    con.commit()
+    return int(cur.lastrowid) if cur.rowcount else None
+
+
+def ask_draft(con: sqlite3.Connection, source: str, d: QuestionDraft) -> int | None:
+    key = f"agent:{d.func}:{d.question.strip().lower()}"
+    return ask(con, source, "agent", d.question, d.func, d.context, key)
+
+
+def sync_contradictions(ledger: Ledger) -> list[int]:
+    """Queue every open contradiction that isn't queued yet."""
+    added = []
+    for c in ledger.contradictions():
+        q = (f"Experiments favour {c['favoured']} for FUNC {c['func']}, but claim bet {c['bet_id']} "
+             f"says {c['claimed']}. Was the experiment flawed (close as 'explained') or is the "
+             f"claim wrong (close as 'claim_withdrawn')?")
+        qid = ask(ledger.con, "ledger", "contradiction", q, c["func"], dict(c), f"contradiction:{c['id']}")
+        if qid:
+            added.append(qid)
+    return added
+
+
+def get(con: sqlite3.Connection, qid: int) -> Question:
+    row = con.execute("SELECT * FROM agent_questions WHERE id=?", (qid,)).fetchone()
+    if row is None:
+        raise KeyError(f"no question {qid}")
+    return Question.from_row(row)
+
+
+def open_questions(con: sqlite3.Connection) -> list[Question]:
+    return [Question.from_row(r) for r in
+            con.execute("SELECT * FROM agent_questions WHERE status='open' ORDER BY id")]
+
+
+def all_questions(con: sqlite3.Connection) -> list[Question]:
+    return [Question.from_row(r) for r in con.execute("SELECT * FROM agent_questions ORDER BY id")]
+
+
+def answer(ledger: Ledger, qid: int, text: str, claim: str | None = None, confidence: float | None = None,
+           close: str | None = None) -> Question:
+    """Answer a question. Optionally assert a label claim and/or close the contradiction it is about."""
+    q = get(ledger.con, qid)
+    if claim is not None:
+        if q.func is None or confidence is None:
+            raise ValueError("a claim needs a question about a function and a --confidence")
+        ledger.call(q.func, claim, confidence, source="human", detail=f"answer to question {qid}")
+    if close is not None:
+        if q.kind != "contradiction":
+            raise ValueError("only contradiction questions close a contradiction")
+        ledger.close_contradiction(q.context["id"], close)
+    ledger.con.execute("UPDATE agent_questions SET status='answered', answer=?, answered=CURRENT_TIMESTAMP"
+                       " WHERE id=?", (text, qid))
+    ledger.con.commit()
+    return get(ledger.con, qid)
+
+
+def dismiss(con: sqlite3.Connection, qid: int) -> None:
+    get(con, qid)
+    con.execute("UPDATE agent_questions SET status='dismissed', answered=CURRENT_TIMESTAMP WHERE id=?", (qid,))
+    con.commit()
