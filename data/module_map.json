@@ -1,0 +1,1297 @@
+{
+  "report": {
+    "functions": 1610,
+    "labelled_pairs": 242,
+    "positive_pairs": 26,
+    "feature_auc": {
+      "pad": 0.555,
+      "align_shift": 0.552,
+      "frame_shift": 0.674,
+      "call_clean": 0.817,
+      "data_shift": 0.687,
+      "in_anchor": 0.488
+    },
+    "model_cv_auc": 0.805,
+    "weights": {
+      "pad": -0.305,
+      "align_shift": -0.017,
+      "frame_shift": 0.385,
+      "call_clean": 0.953,
+      "data_shift": 0.179,
+      "in_anchor": -0.854
+    },
+    "threshold": 0.1404,
+    "boundaries": 48,
+    "pair_fit_in_sample": {
+      "precision": 0.545,
+      "recall": 0.462,
+      "f1": 0.5
+    },
+    "event_tables": 13
+  },
+  "segments": [
+    {
+      "seg": 0,
+      "first": 20,
+      "last": 67,
+      "pos_first": "0x11464",
+      "pos_last": "0x148b4",
+      "size": 48,
+      "boundary_conf": null,
+      "label": "Mission event function table",
+      "anchors": [
+        "Mission event function table"
+      ],
+      "families": {},
+      "named_examples": [
+        "Unknown",
+        "GetSpecialShips",
+        "BeginEvents"
+      ]
+    },
+    {
+      "seg": 1,
+      "first": 68,
+      "last": 126,
+      "pos_first": "0x149ac",
+      "pos_last": "0x18dec",
+      "size": 59,
+      "boundary_conf": 0.089,
+      "label": "Journal event function table",
+      "anchors": [
+        "Journal event function table"
+      ],
+      "families": {},
+      "named_examples": [
+        "ExpandBracketCodes"
+      ]
+    },
+    {
+      "seg": 2,
+      "first": 127,
+      "last": 129,
+      "pos_first": "0x18f30",
+      "pos_last": "0x18fcc",
+      "size": 3,
+      "boundary_conf": 0.37,
+      "label": null,
+      "anchors": [],
+      "families": {},
+      "named_examples": []
+    },
+    {
+      "seg": 3,
+      "first": 130,
+      "last": 131,
+      "pos_first": "0x19244",
+      "pos_last": "0x19254",
+      "size": 2,
+      "boundary_conf": 0.594,
+      "label": null,
+      "anchors": [],
+      "families": {},
+      "named_examples": []
+    },
+    {
+      "seg": 4,
+      "first": 132,
+      "last": 133,
+      "pos_first": "0x1926c",
+      "pos_last": "0x1927c",
+      "size": 2,
+      "boundary_conf": 0.395,
+      "label": null,
+      "anchors": [],
+      "families": {},
+      "named_examples": []
+    },
+    {
+      "seg": 5,
+      "first": 134,
+      "last": 143,
+      "pos_first": "0x19284",
+      "pos_last": "0x192f0",
+      "size": 10,
+      "boundary_conf": 0.223,
+      "label": null,
+      "anchors": [],
+      "families": {},
+      "named_examples": []
+    },
+    {
+      "seg": 6,
+      "first": 144,
+      "last": 232,
+      "pos_first": "0x1934c",
+      "pos_last": "0x1c010",
+      "size": 74,
+      "boundary_conf": 0.375,
+      "label": "Event function table for SysMenu",
+      "anchors": [
+        "Event function table for SysMenu"
+      ],
+      "families": {
+        "CdrFile": 19,
+        "SysMenu": 44
+      },
+      "named_examples": [
+        "Unknown",
+        "CdrFileStrChrNon",
+        "CdrFileExpandZeros",
+        "CdrFileCompressZeros",
+        "CdrFileScramble",
+        "CdrFileUnscramble"
+      ]
+    },
+    {
+      "seg": 7,
+      "first": 233,
+      "last": 240,
+      "pos_first": "0x1c04c",
+      "pos_last": "0x1c721",
+      "size": 8,
+      "boundary_conf": 0.121,
+      "label": "DATA_005038",
+      "anchors": [
+        "DATA_005038"
+      ],
+      "families": {},
+      "named_examples": []
+    },
+    {
+      "seg": 8,
+      "first": 241,
+      "last": 257,
+      "pos_first": "0x1c79d",
+      "pos_last": "0x1d224",
+      "size": 17,
+      "boundary_conf": 0.044,
+      "label": "DATA_005054",
+      "anchors": [
+        "DATA_005054"
+      ],
+      "families": {},
+      "named_examples": []
+    },
+    {
+      "seg": 9,
+      "first": 258,
+      "last": 275,
+      "pos_first": "0x1d248",
+      "pos_last": "0x1dfb0",
+      "size": 18,
+      "boundary_conf": 0.133,
+      "label": "DATA_005091",
+      "anchors": [
+        "DATA_005091"
+      ],
+      "families": {
+        "Console": 4
+      },
+      "named_examples": [
+        "ConsoleDrawButtons",
+        "ConsoleSetButtonImage",
+        "ConsoleShowButton",
+        "ConsoleHideButton"
+      ]
+    },
+    {
+      "seg": 10,
+      "first": 276,
+      "last": 567,
+      "pos_first": "0x1e234",
+      "pos_last": "0x27414",
+      "size": 292,
+      "boundary_conf": 0.121,
+      "label": "DATA_005105",
+      "anchors": [
+        "DATA_005105"
+      ],
+      "families": {},
+      "named_examples": [
+        "AddFederalRank",
+        "AddImperialRank",
+        "ShowCommMessage",
+        "GetEquipmentAmount"
+      ]
+    },
+    {
+      "seg": 11,
+      "first": 568,
+      "last": 661,
+      "pos_first": "0x27438",
+      "pos_last": "0x2cd2c",
+      "size": 94,
+      "boundary_conf": 0.12,
+      "label": "Starport module event functions",
+      "anchors": [
+        "Starport module event functions"
+      ],
+      "families": {},
+      "named_examples": [
+        "FindOppositionSystem",
+        "AddToShipyard"
+      ]
+    },
+    {
+      "seg": 12,
+      "first": 662,
+      "last": 803,
+      "pos_first": "0x2cd3e",
+      "pos_last": "0x314b4",
+      "size": 142,
+      "boundary_conf": 0.096,
+      "label": "DATA_006254",
+      "anchors": [
+        "DATA_006254"
+      ],
+      "families": {
+        "Spawn": 5
+      },
+      "named_examples": [
+        "SpawnTraders",
+        "SpawnHSTrader",
+        "SpawnHSTrader2",
+        "SpawnDockedTrader",
+        "SpawnAuxTrader",
+        "GeneratePosition"
+      ]
+    },
+    {
+      "seg": 13,
+      "first": 804,
+      "last": 864,
+      "pos_first": "0x31500",
+      "pos_last": "0x3716c",
+      "size": 61,
+      "boundary_conf": 0.121,
+      "label": "Event function table for system stuff",
+      "anchors": [
+        "Event function table for system stuff"
+      ],
+      "families": {},
+      "named_examples": [
+        "GetNumstars",
+        "GetNeighborSystem",
+        "GetSysGenParams"
+      ]
+    },
+    {
+      "seg": 14,
+      "first": 865,
+      "last": 897,
+      "pos_first": "0x371d4",
+      "pos_last": "0x3b6b4",
+      "size": 33,
+      "boundary_conf": 0.04,
+      "label": "DATA_007104",
+      "anchors": [
+        "DATA_007104"
+      ],
+      "families": {},
+      "named_examples": [
+        "NoOverride",
+        "GetSystemDataExt",
+        "GetSystemDataExt2",
+        "GetSysObjectData"
+      ]
+    },
+    {
+      "seg": 15,
+      "first": 898,
+      "last": 953,
+      "pos_first": "0x3b964",
+      "pos_last": "0x3e288",
+      "size": 55,
+      "boundary_conf": 0.147,
+      "label": "Spawn",
+      "anchors": [],
+      "families": {
+        "Spawn": 1
+      },
+      "named_examples": [
+        "DestroyObject",
+        "SpawnCargo",
+        "DestroyEquip",
+        "TakeDamage"
+      ]
+    },
+    {
+      "seg": 16,
+      "first": 954,
+      "last": 962,
+      "pos_first": "0x3e43c",
+      "pos_last": "0x3e88c",
+      "size": 9,
+      "boundary_conf": 0.149,
+      "label": "DATA_007230",
+      "anchors": [
+        "DATA_007230"
+      ],
+      "families": {},
+      "named_examples": []
+    },
+    {
+      "seg": 17,
+      "first": 963,
+      "last": 1125,
+      "pos_first": "0x3ec44",
+      "pos_last": "0x462a8",
+      "size": 163,
+      "boundary_conf": 0.075,
+      "label": "DATA_007239",
+      "anchors": [
+        "DATA_007239"
+      ],
+      "families": {},
+      "named_examples": [
+        "nothing"
+      ]
+    },
+    {
+      "seg": 18,
+      "first": 1326,
+      "last": 1331,
+      "pos_first": "0x4e384",
+      "pos_last": "0x4ea8c",
+      "size": 6,
+      "boundary_conf": 0.183,
+      "label": "DPal",
+      "anchors": [],
+      "families": {
+        "DPal": 5
+      },
+      "named_examples": [
+        "DPal32to16",
+        "DPal16toPal",
+        "DPalClear",
+        "DPalBuild",
+        "DPalSet"
+      ]
+    },
+    {
+      "seg": 19,
+      "first": 1332,
+      "last": 1401,
+      "pos_first": "0x4eb18",
+      "pos_last": "0x4f83c",
+      "size": 70,
+      "boundary_conf": 0.142,
+      "label": "String",
+      "anchors": [],
+      "families": {
+        "Int64": 10,
+        "String": 60
+      },
+      "named_examples": [
+        "Int64Abs",
+        "Int64Add64",
+        "Int64Add32",
+        "Int64Sub64",
+        "Int64Sub32",
+        "Int64Mul64"
+      ]
+    },
+    {
+      "seg": 20,
+      "first": 1402,
+      "last": 1406,
+      "pos_first": "0x4f860",
+      "pos_last": "0x4f974",
+      "size": 2,
+      "boundary_conf": 0.148,
+      "label": "String",
+      "anchors": [],
+      "families": {
+        "String": 1,
+        "Keyb": 1
+      },
+      "named_examples": [
+        "StringDrawWrapPersist",
+        "KeybGetKeyState"
+      ]
+    },
+    {
+      "seg": 21,
+      "first": 1407,
+      "last": 1408,
+      "pos_first": "0x4f9a0",
+      "pos_last": "0x4fa8c",
+      "size": 2,
+      "boundary_conf": 0.405,
+      "label": "Keyb",
+      "anchors": [],
+      "families": {
+        "Keyb": 2
+      },
+      "named_examples": [
+        "KeybInit",
+        "KeybCleanup"
+      ]
+    },
+    {
+      "seg": 22,
+      "first": 1409,
+      "last": 1438,
+      "pos_first": "0x4fb44",
+      "pos_last": "0x509e4",
+      "size": 10,
+      "boundary_conf": 0.212,
+      "label": "Gui",
+      "anchors": [],
+      "families": {
+        "Gui": 7,
+        "Mouse": 1
+      },
+      "named_examples": [
+        "GuiGetLastActionInternal",
+        "GuiSetLastActionInternal",
+        "GuiGetLastAction",
+        "GuiSetLastAction",
+        "MouseInit",
+        "GuiReadAllInput"
+      ]
+    },
+    {
+      "seg": 23,
+      "first": 1439,
+      "last": 1440,
+      "pos_first": "0x509f0",
+      "pos_last": "0x50a2c",
+      "size": 2,
+      "boundary_conf": 0.202,
+      "label": "Gui",
+      "anchors": [],
+      "families": {
+        "Gui": 2
+      },
+      "named_examples": [
+        "GuiSetConsoleHotAreas",
+        "GuiAddHotAreas"
+      ]
+    },
+    {
+      "seg": 24,
+      "first": 1441,
+      "last": 1442,
+      "pos_first": "0x50a68",
+      "pos_last": "0x50ac8",
+      "size": 2,
+      "boundary_conf": 0.24,
+      "label": "Gui",
+      "anchors": [],
+      "families": {
+        "Gui": 2
+      },
+      "named_examples": [
+        "GuiAddHotRect",
+        "GuiAddHotSquare"
+      ]
+    },
+    {
+      "seg": 25,
+      "first": 1443,
+      "last": 1449,
+      "pos_first": "0x50ae8",
+      "pos_last": "0x50c8c",
+      "size": 7,
+      "boundary_conf": 0.142,
+      "label": "ScrnShot",
+      "anchors": [],
+      "families": {
+        "Gui": 3,
+        "ScrnShot": 4
+      },
+      "named_examples": [
+        "GuiRemoveHotArea",
+        "GuiSetXYAccum",
+        "GuiGetXYAccum",
+        "ScrnShotSave",
+        "ScrnshotWriteHeader",
+        "ScrnShotWritePalette"
+      ]
+    },
+    {
+      "seg": 26,
+      "first": 1456,
+      "last": 1467,
+      "pos_first": "0x50f38",
+      "pos_last": "0x5133f",
+      "size": 7,
+      "boundary_conf": 0.149,
+      "label": "Gui",
+      "anchors": [],
+      "families": {
+        "Gui": 1
+      },
+      "named_examples": [
+        "FileDelete",
+        "GuiAddHotRect2"
+      ]
+    },
+    {
+      "seg": 27,
+      "first": 1468,
+      "last": 1521,
+      "pos_first": "0x513f1",
+      "pos_last": "0x537b0",
+      "size": 54,
+      "boundary_conf": 0.148,
+      "label": null,
+      "anchors": [],
+      "families": {},
+      "named_examples": [
+        "getVertex",
+        "getVar",
+        "getRadius",
+        "fp"
+      ]
+    },
+    {
+      "seg": 28,
+      "first": 1522,
+      "last": 1523,
+      "pos_first": "0x537c1",
+      "pos_last": "0x537cd",
+      "size": 2,
+      "boundary_conf": 0.236,
+      "label": null,
+      "anchors": [],
+      "families": {},
+      "named_examples": []
+    },
+    {
+      "seg": 29,
+      "first": 1524,
+      "last": 1525,
+      "pos_first": "0x537f4",
+      "pos_last": "0x53814",
+      "size": 2,
+      "boundary_conf": 0.449,
+      "label": null,
+      "anchors": [],
+      "families": {},
+      "named_examples": [
+        "TogglePtr",
+        "nothing"
+      ]
+    },
+    {
+      "seg": 30,
+      "first": 1526,
+      "last": 1528,
+      "pos_first": "0x53818",
+      "pos_last": "0x5397c",
+      "size": 3,
+      "boundary_conf": 0.198,
+      "label": null,
+      "anchors": [],
+      "families": {},
+      "named_examples": [
+        "nothing",
+        "SysInit",
+        "SysCleanup"
+      ]
+    },
+    {
+      "seg": 31,
+      "first": 1529,
+      "last": 1530,
+      "pos_first": "0x539e4",
+      "pos_last": "0x539f4",
+      "size": 2,
+      "boundary_conf": 0.142,
+      "label": null,
+      "anchors": [],
+      "families": {},
+      "named_examples": [
+        "SysExit"
+      ]
+    },
+    {
+      "seg": 32,
+      "first": 1531,
+      "last": 1568,
+      "pos_first": "0x53a34",
+      "pos_last": "0x550a4",
+      "size": 37,
+      "boundary_conf": 0.424,
+      "label": null,
+      "anchors": [],
+      "families": {},
+      "named_examples": [
+        "GetModelInstancePtr",
+        "GetModelPtr",
+        "GetModelPtr2"
+      ]
+    },
+    {
+      "seg": 33,
+      "first": 1569,
+      "last": 1571,
+      "pos_first": "0x550d0",
+      "pos_last": "0x551ac",
+      "size": 3,
+      "boundary_conf": 0.22,
+      "label": "Draw",
+      "anchors": [],
+      "families": {
+        "Draw": 3
+      },
+      "named_examples": [
+        "DrawScannerStalk",
+        "DrawUpStalk",
+        "DrawDownStalk"
+      ]
+    },
+    {
+      "seg": 34,
+      "first": 1572,
+      "last": 1578,
+      "pos_first": "0x551f0",
+      "pos_last": "0x552f4",
+      "size": 7,
+      "boundary_conf": 0.34,
+      "label": null,
+      "anchors": [],
+      "families": {},
+      "named_examples": [
+        "ClearBuf"
+      ]
+    },
+    {
+      "seg": 35,
+      "first": 1579,
+      "last": 1580,
+      "pos_first": "0x55340",
+      "pos_last": "0x553b4",
+      "size": 2,
+      "boundary_conf": 0.16,
+      "label": null,
+      "anchors": [],
+      "families": {},
+      "named_examples": [
+        "PersistBlit"
+      ]
+    },
+    {
+      "seg": 36,
+      "first": 1581,
+      "last": 1610,
+      "pos_first": "0x554a4",
+      "pos_last": "0x5723c",
+      "size": 23,
+      "boundary_conf": 0.438,
+      "label": "Draw",
+      "anchors": [],
+      "families": {
+        "Tex": 6,
+        "Draw": 12
+      },
+      "named_examples": [
+        "PersistTextWrite",
+        "TextWriteStringOnly",
+        "TextWriteDefaultColor",
+        "TextWriteDefaultClip",
+        "TextWriteDefaultHeight",
+        "TextWriteDetailed"
+      ]
+    },
+    {
+      "seg": 37,
+      "first": 1611,
+      "last": 1616,
+      "pos_first": "0x572ec",
+      "pos_last": "0x57abc",
+      "size": 4,
+      "boundary_conf": 0.166,
+      "label": "Draw",
+      "anchors": [],
+      "families": {
+        "Draw": 4
+      },
+      "named_examples": [
+        "DrawParticle",
+        "DrawCircle",
+        "DrawSpans",
+        "DrawLine"
+      ]
+    },
+    {
+      "seg": 38,
+      "first": 1617,
+      "last": 1619,
+      "pos_first": "0x57d34",
+      "pos_last": "0x57da4",
+      "size": 3,
+      "boundary_conf": 0.182,
+      "label": "Blit",
+      "anchors": [],
+      "families": {
+        "Blit": 1
+      },
+      "named_examples": [
+        "BlitVidToBuf",
+        "ClearUpperBuf",
+        "ZeroUpperBuf"
+      ]
+    },
+    {
+      "seg": 39,
+      "first": 1620,
+      "last": 1627,
+      "pos_first": "0x57dbc",
+      "pos_last": "0x58010",
+      "size": 8,
+      "boundary_conf": 0.189,
+      "label": "Blit",
+      "anchors": [],
+      "families": {
+        "Blit": 6,
+        "Draw": 1
+      },
+      "named_examples": [
+        "BmpIndexToPtr",
+        "BlitIndexToBuf",
+        "BlitClipIndexToBuf",
+        "BlitIndex",
+        "BlitClipIndex",
+        "BlitClipInternal"
+      ]
+    },
+    {
+      "seg": 40,
+      "first": 1628,
+      "last": 1629,
+      "pos_first": "0x58058",
+      "pos_last": "0x580b8",
+      "size": 2,
+      "boundary_conf": 0.302,
+      "label": "Draw",
+      "anchors": [],
+      "families": {
+        "Draw": 2
+      },
+      "named_examples": [
+        "DrawBoxToBufMasked",
+        "DrawPixelToBuf"
+      ]
+    },
+    {
+      "seg": 41,
+      "first": 1630,
+      "last": 1641,
+      "pos_first": "0x580d8",
+      "pos_last": "0x58614",
+      "size": 8,
+      "boundary_conf": 0.463,
+      "label": "Video",
+      "anchors": [],
+      "families": {
+        "Video": 1
+      },
+      "named_examples": [
+        "EnablePtr",
+        "DisablePtr",
+        "UpdatePtr",
+        "SetPtrImage",
+        "FlipScreen",
+        "FlipScreenLow"
+      ]
+    },
+    {
+      "seg": 42,
+      "first": 1642,
+      "last": 1776,
+      "pos_first": "0x586c8",
+      "pos_last": "0x6125c",
+      "size": 132,
+      "boundary_conf": 0.614,
+      "label": "Vec64",
+      "anchors": [],
+      "families": {
+        "Draw": 6,
+        "Tex": 4,
+        "Vec64": 7,
+        "Mat": 6
+      },
+      "named_examples": [
+        "GenerateTexSteps",
+        "SelectTexFunc",
+        "DrawTexTriangle",
+        "DrawTexTriangleDet",
+        "DrawTexTriangleInternal",
+        "DrawTexQuad"
+      ]
+    },
+    {
+      "seg": 43,
+      "first": 1777,
+      "last": 1787,
+      "pos_first": "0x61430",
+      "pos_last": "0x61674",
+      "size": 11,
+      "boundary_conf": 0.189,
+      "label": null,
+      "anchors": [],
+      "families": {},
+      "named_examples": []
+    },
+    {
+      "seg": 44,
+      "first": 1788,
+      "last": 1790,
+      "pos_first": "0x616b0",
+      "pos_last": "0x617f4",
+      "size": 3,
+      "boundary_conf": 0.178,
+      "label": null,
+      "anchors": [],
+      "families": {},
+      "named_examples": []
+    },
+    {
+      "seg": 45,
+      "first": 1791,
+      "last": 1873,
+      "pos_first": "0x61818",
+      "pos_last": "0x6c600",
+      "size": 83,
+      "boundary_conf": 0.164,
+      "label": null,
+      "anchors": [],
+      "families": {},
+      "named_examples": []
+    },
+    {
+      "seg": 46,
+      "first": 1874,
+      "last": 1879,
+      "pos_first": "0x6d43c",
+      "pos_last": "0x6f8f4",
+      "size": 6,
+      "boundary_conf": 0.141,
+      "label": null,
+      "anchors": [],
+      "families": {},
+      "named_examples": []
+    },
+    {
+      "seg": 47,
+      "first": 1880,
+      "last": 1881,
+      "pos_first": "0x6fb7c",
+      "pos_last": "0x6fc7a",
+      "size": 2,
+      "boundary_conf": 0.391,
+      "label": "Video",
+      "anchors": [],
+      "families": {
+        "Video": 2
+      },
+      "named_examples": [
+        "VideoInit",
+        "VideoBlitBuffer"
+      ]
+    },
+    {
+      "seg": 48,
+      "first": 1883,
+      "last": 2095,
+      "pos_first": "0x6fcce",
+      "pos_last": "0x76414",
+      "size": 15,
+      "boundary_conf": 0.175,
+      "label": "Sound",
+      "anchors": [],
+      "families": {
+        "Video": 1,
+        "Sound": 9
+      },
+      "named_examples": [
+        "VideoCleanup",
+        "SoundInit",
+        "SoundPlaySong",
+        "SoundStopSong",
+        "nothing",
+        "SoundPlaySample"
+      ]
+    }
+  ],
+  "family_integrity": [
+    {
+      "family": "CdrFile",
+      "named": 14,
+      "span": 14,
+      "boundaries_inside": 0
+    },
+    {
+      "family": "CdrFile",
+      "named": 5,
+      "span": 5,
+      "boundaries_inside": 0
+    },
+    {
+      "family": "SysMenu",
+      "named": 43,
+      "span": 43,
+      "boundaries_inside": 0
+    },
+    {
+      "family": "Console",
+      "named": 4,
+      "span": 4,
+      "boundaries_inside": 0
+    },
+    {
+      "family": "Spawn",
+      "named": 6,
+      "span": 238,
+      "boundaries_inside": 3
+    },
+    {
+      "family": "DPal",
+      "named": 5,
+      "span": 6,
+      "boundaries_inside": 0
+    },
+    {
+      "family": "Int64",
+      "named": 10,
+      "span": 10,
+      "boundaries_inside": 0
+    },
+    {
+      "family": "String",
+      "named": 61,
+      "span": 61,
+      "boundaries_inside": 1
+    },
+    {
+      "family": "Keyb",
+      "named": 3,
+      "span": 3,
+      "boundaries_inside": 1
+    },
+    {
+      "family": "Gui",
+      "named": 4,
+      "span": 4,
+      "boundaries_inside": 0
+    },
+    {
+      "family": "Gui",
+      "named": 10,
+      "span": 12,
+      "boundaries_inside": 3
+    },
+    {
+      "family": "ScrnShot",
+      "named": 4,
+      "span": 4,
+      "boundaries_inside": 0
+    },
+    {
+      "family": "Draw",
+      "named": 3,
+      "span": 3,
+      "boundaries_inside": 0
+    },
+    {
+      "family": "Tex",
+      "named": 6,
+      "span": 6,
+      "boundaries_inside": 0
+    },
+    {
+      "family": "Draw",
+      "named": 16,
+      "span": 20,
+      "boundaries_inside": 1
+    },
+    {
+      "family": "Blit",
+      "named": 7,
+      "span": 10,
+      "boundaries_inside": 1
+    },
+    {
+      "family": "Draw",
+      "named": 3,
+      "span": 3,
+      "boundaries_inside": 1
+    },
+    {
+      "family": "Draw",
+      "named": 6,
+      "span": 6,
+      "boundaries_inside": 0
+    },
+    {
+      "family": "Tex",
+      "named": 4,
+      "span": 4,
+      "boundaries_inside": 0
+    },
+    {
+      "family": "Vec64",
+      "named": 7,
+      "span": 8,
+      "boundaries_inside": 0
+    },
+    {
+      "family": "Mat",
+      "named": 6,
+      "span": 12,
+      "boundaries_inside": 0
+    },
+    {
+      "family": "Video",
+      "named": 3,
+      "span": 3,
+      "boundaries_inside": 1
+    },
+    {
+      "family": "Sound",
+      "named": 9,
+      "span": 10,
+      "boundaries_inside": 0
+    }
+  ],
+  "event_tables": [
+    {
+      "label": "DATA_001700",
+      "comment": "Mission event function table",
+      "slots": [
+        57,
+        null,
+        59,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        60,
+        61
+      ]
+    },
+    {
+      "label": "DATA_002285",
+      "comment": "Journal event function table",
+      "slots": [
+        91,
+        83,
+        90,
+        81,
+        null,
+        null,
+        null,
+        null,
+        72,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "label": "DATA_004962",
+      "comment": "Event function table for SysMenu",
+      "slots": [
+        218,
+        224,
+        null,
+        209,
+        216,
+        null,
+        null,
+        null,
+        227,
+        null,
+        232,
+        null
+      ]
+    },
+    {
+      "label": "DATA_005038",
+      "comment": "",
+      "slots": [
+        null,
+        null,
+        233,
+        240,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        238,
+        null
+      ]
+    },
+    {
+      "label": "DATA_005054",
+      "comment": "",
+      "slots": [
+        242,
+        null,
+        243,
+        null,
+        null,
+        254,
+        null,
+        null,
+        null,
+        null,
+        null,
+        256
+      ]
+    },
+    {
+      "label": "DATA_005091",
+      "comment": "",
+      "slots": [
+        259,
+        null,
+        258,
+        273,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "label": "DATA_005105",
+      "comment": "",
+      "slots": [
+        280,
+        285,
+        296,
+        292,
+        null,
+        null,
+        278,
+        null,
+        281,
+        null,
+        302,
+        null
+      ]
+    },
+    {
+      "label": "DATA_006163",
+      "comment": "Starport module event functions",
+      "slots": [
+        616,
+        null,
+        648,
+        null,
+        null,
+        647,
+        660,
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "label": "DATA_006254",
+      "comment": "",
+      "slots": [
+        687,
+        null,
+        673,
+        null,
+        null,
+        705,
+        707,
+        null,
+        null,
+        null,
+        null,
+        779
+      ]
+    },
+    {
+      "label": "DATA_006798",
+      "comment": "Event function table for system stuff",
+      "slots": [
+        829,
+        834,
+        839,
+        840,
+        828,
+        null,
+        null,
+        null,
+        864,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "label": "DATA_007104",
+      "comment": "",
+      "slots": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        866,
+        867,
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "label": "DATA_007230",
+      "comment": "",
+      "slots": [
+        959,
+        null,
+        null,
+        null,
+        962,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "label": "DATA_007239",
+      "comment": "",
+      "slots": [
+        963,
+        966,
+        null,
+        982,
+        977,
+        985,
+        null,
+        null,
+        964,
+        null,
+        null,
+        null
+      ]
+    }
+  ]
+}
