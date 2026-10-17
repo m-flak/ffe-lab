@@ -74,6 +74,30 @@ ffelab problem and is a skill AI-engineering roles ask for.
 Analysis, agents and the original game (DOSBox/QEMU) run natively on macOS.
 A Windows VM is only needed for FFED3D-specific work.
 
+### D11. Temporal for durable experiment campaigns
+Campaigns run as Temporal workflows (the campaign loop, saved step by step so
+it resumes after a crash or reboot); each experiment (logging pass, halt,
+knockout) is an activity (a normal function Temporal retries) wrapping the
+existing `loop.py` / `knockout.py` call. `loop.py` stays usable without
+Temporal as lite mode.
+- *Hangs are the main failure:* a stuck GDB stub or frozen game. Activity
+  heartbeats detect that and retry; Prefect's timeouts can't reliably stop a
+  sync task blocked on a socket.
+- *A campaign is an agent loop,* branching on results and waiting on human
+  answers (signals/updates), not a fixed batch that re-runs with cached steps.
+- *One emulator, one experiment at a time:* one worker per emulator task queue
+  with `max_concurrent_activities=1`; more emulators means more queues.
+- Pydantic models (plan item 1) pass through `temporalio.contrib.pydantic`.
+- *Costs:* a local server (`temporal server start-dev --db-filename ...`,
+  SQLite-backed), determinism rules in workflow code (no I/O, clock or random:
+  all of that lives in activities), ~2 MB payloads (screenshots go as paths).
+- *Needed regardless of engine:* experiments get a unique run key so a retry
+  never records or counts evidence twice; a game crash in a knockout is a
+  result, a QEMU/socket failure is a retryable error; each experiment's ledger
+  writes are one transaction.
+*Would change if:* campaigns turn out to be short fixed batches that never wait
+on a human, or the determinism rules keep biting.
+
 ### D12. Evals: a small custom harness, gold labels from experiments only
 Inspect AI and promptfoo were the candidates. promptfoo is Node and YAML-first;
 Inspect is the better long-term fit but would wrap a ~400-line need (load
@@ -125,4 +149,3 @@ or the adapter's translations grow beyond a handful (then SQLAlchemy Core).
 - Is the downloadable `FIRSTENC.EXE` the build John Jordan disassembled?
   (`ffelab exe-check` answers this.)
 - QEMU + FreeDOS vs DOSBox-X for the main emulator: decide at bring-up.
-- Temporal vs Prefect: decide when starting step 4 of the plan.

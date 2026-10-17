@@ -57,12 +57,13 @@ solves a real problem in ffelab. Keep SQLite as a zero-setup "lite mode".
   the blind labeller `similar_functions` improves its accuracy before adding the
   tool to its agent file.
 
-### 4. Durable experiment campaigns (Temporal or Prefect)
+### 4. Durable experiment campaigns (Temporal, see D11)
 - Long experiment runs as durable workflows: an emulator crash or hang retries
   from the last save state instead of losing the campaign. Activities: load
   state, logging pass, halt, knockout; each idempotent and recorded.
-- Decide Temporal vs Prefect when starting: Temporal for strict durability and
-  agent-style long workflows, Prefect for a lighter Python-native setup.
+- Temporal chosen (D11). First: unique run keys on experiments so retries
+  never double-count evidence; then heartbeating activities and a campaign
+  workflow that takes human answers as signals.
 
 ---
 
