@@ -216,7 +216,8 @@ class TestEmbeddings(unittest.TestCase):
 
     @unittest.skipUnless(PG_URL, "pgvector index only exists on Postgres")
     def test_postgres_search_uses_the_hnsw_index(self):
-        self.assertTrue(embed.has_pgvector(self.con))
+        if not embed.has_pgvector(self.con):
+            self.skipTest("pgvector extension not installed on this server")
         self.con.execute("SET enable_seqscan = off")     # 5 rows: force the planner to show it can use it
         q = self.con.execute("SELECT vec FROM embeddings WHERE func=1").fetchone()["vec"]
         plan = "\n".join(r[0] for r in self.con.execute(
