@@ -30,7 +30,7 @@ solves a real problem in ffelab. Keep SQLite as a zero-setup "lite mode".
   Brier/calibration, cost and tokens per correct label. Compare models and
   prompts. Candidates: Inspect AI, promptfoo, or a small custom harness.
 - Run evals in CI so a prompt change that makes agents worse fails the build.
-- **Status (v0.5): built.** Custom harness chosen (D11). Remaining: once the
+- **Status (v0.5): built.** Custom harness chosen (D12). Remaining: once the
   emulator settles labels, `ffelab eval export` real cases, run the agents,
   replace the provisional baselines with `ffelab eval baseline`, and gate on
   the `test` split. Until then CI runs on synthetic smoke cases.

@@ -27,7 +27,7 @@ Metrics (definitions in `src/ffelab/evals/metrics.py`):
 
 ## Where answers come from
 
-Only experiments make ground truth (DECISIONS D3, D11). `ffelab eval export`
+Only experiments make ground truth (DECISIONS D3, D12). `ffelab eval export`
 takes a function as a case only when its experiment-only belief is decisive (the
 same test `settle_claims` uses) and takes red-team cases only from settled
 claims. Opinions, inherited names and propagated labels never become gold.

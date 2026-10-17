@@ -74,7 +74,7 @@ ffelab problem and is a skill AI-engineering roles ask for.
 Analysis, agents and the original game (DOSBox/QEMU) run natively on macOS.
 A Windows VM is only needed for FFED3D-specific work.
 
-### D11. Evals: a small custom harness, gold labels from experiments only
+### D12. Evals: a small custom harness, gold labels from experiments only
 Inspect AI and promptfoo were the candidates. promptfoo is Node and YAML-first;
 Inspect is the better long-term fit but would wrap a ~400-line need (load
 cases, call one agent, score, gate) in a framework before there is any real
