@@ -16,7 +16,7 @@
                   [--prompt AGENT.md] [--effort LEVEL] [--split dev|test] [--out REPORT.json]
       score an agent; prints metrics, writes a report
   ffelab eval gate --report REPORT.json --baseline BASELINE.json
-      exit 1 if the run is worse than the baseline (used in CI)
+      exit 1 if the run is worse than the baseline
   ffelab eval baseline --report REPORT.json --out BASELINE.json [--margin 0.05]
       turn a measured run into gate thresholds
   ffelab eval compare REPORT.json [REPORT.json ...] [--split test]
