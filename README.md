@@ -42,7 +42,7 @@ FFED3D_DIR=../ffed3d python -m pytest       # also runs the real-data test
 | `ffelab exe-check EXE [--map]` | Check an exe against the asm's layout; store a per-binary address map (identity, or aligned by content for other builds) |
 | `ffelab export --src DIR [--auto]` | Write confirmed names into a copy of `ffe.asm` as alias labels, plus a reviewable diff |
 | `ffelab uncertain` | The most uncertain functions, where the agent should look next |
-| `ffelab eval run / gate / compare / export` | Score the blind labeller and red team against experiment-confirmed labels; gate CI on it (see `docs/EVALS.md`) |
+| `ffelab eval run / gate / compare / export` | Score the blind labeller and red team against experiment-confirmed labels; gate prompt changes on it (see `docs/EVALS.md`) |
 | `python -m ffelab.mcp_server` | The MCP server agents use (31 tools) |
 
 ## Modules
@@ -65,7 +65,7 @@ FFED3D_DIR=../ffed3d python -m pytest       # also runs the real-data test
 | `export.py` | Confirmed names → alias labels in a copy of the asm |
 | `harness/` | `GameBackend` interface, `FakeBackend`, `EmulatorBackend` (QEMU / DOSBox-X), GDB client |
 | `mcp_server.py` | The agent tool surface |
-| `evals/` | Eval harness: cases from settled labels, Claude / heuristic / replay solvers, metrics, CI gate |
+| `evals/` | Eval harness: cases from settled labels, Claude / heuristic / replay solvers, metrics, gate |
 
 Agents: `.claude/agents/red-team.md` and `.claude/agents/blind-labeller.md`
 (Claude Code subagents, each limited to the tools its role needs).
@@ -116,7 +116,7 @@ to a JSON `EmulatorConfig`, e.g. `{"binary": "<id from exe-check>", "code_base":
 ## Status
 
 - Working: static map, ledger, adversarial layer, fingerprints, propagation,
-  knockouts, exe-check, export, Pydantic models, eval harness with CI gate. 70 tests, unit-tested against fakes plus one
+  knockouts, exe-check, export, Pydantic models, eval harness with a gate. 70 tests, unit-tested against fakes plus one
   real-data test.
 - **Not yet run against a live emulator.** Expect one session of tuning key maps,
   timings and the code base address.

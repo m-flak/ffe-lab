@@ -6,7 +6,7 @@ so no opinion, inherited name or static derivation ever becomes ground truth.
 Red-team cases come from claims that experiments have already settled.
 
 Each case stores a ``blind_view`` snapshot, so an eval runs without ffe.db or
-the ffed3d asm (that is what lets CI run it), and a ``split``:
+the ffed3d asm (cheap to rerun anywhere), and a ``split``:
 
 * ``dev``: tune prompts against these.
 * ``test``: held out. Only look at the score, never at individual answers,

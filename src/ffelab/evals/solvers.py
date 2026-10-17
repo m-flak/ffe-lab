@@ -5,8 +5,8 @@
   is exactly what the eval measures. The answer comes back as structured
   output (JSON constrained to a Pydantic model), never parsed from prose.
 * ``HeuristicSolver``: a few regex rules on the asm. A floor: an LLM agent
-  that can't beat it isn't earning its tokens. Deterministic and free, so CI
-  can always run it.
+  that can't beat it isn't earning its tokens. Deterministic and free, so it
+  can always run.
 * ``ReplaySolver``: re-scores answers recorded in an earlier report, for
   changing metrics without paying for new calls.
 
@@ -101,13 +101,19 @@ def user_message(case: EvalCase) -> str:
 class ClaudeSolver:
     def __init__(self, task: str, model: str = DEFAULT_MODEL, prompt_path: str | Path | None = None,
                  effort: str | None = None, client=None):
-        import anthropic                                   # optional dependency: pip install .[evals]
         self.task, self.model, self.effort = task, model, effort
         self.system = load_agent_prompt(TASK_AGENT[task], prompt_path) + "\n\n" + OFFLINE_NOTE[task]
         self.prompt_sha = hashlib.sha256(self.system.encode()).hexdigest()[:12]
         self.name = f"claude:{model}" + (f"@{effort}" if effort else "")
-        self.client = client or anthropic.Anthropic()
-        self._anthropic = anthropic
+        if client is None:
+            import anthropic                               # optional dependency: pip install .[evals]
+            client = anthropic.Anthropic()
+        self.client = client
+        try:
+            from anthropic import APIError
+            self._errors: tuple[type[Exception], ...] = (APIError, ValueError)
+        except ImportError:                                # tests pass a fake client without the SDK
+            self._errors = (ValueError,)
 
     def solve(self, case: EvalCase) -> SolverOutput:
         kwargs = {"output_config": {"effort": self.effort}} if self.effort else {}
@@ -117,7 +123,7 @@ class ClaudeSolver:
                 model=self.model, max_tokens=16000, system=self.system,
                 messages=[{"role": "user", "content": user_message(case)}],
                 output_format=verdict_type(self.task), **kwargs)
-        except (self._anthropic.APIError, ValueError) as e:  # ValueError: output failed validation
+        except self._errors as e:  # ValueError: output failed validation
             return SolverOutput(case_id=case.id, error=f"{type(e).__name__}: {e}",
                                 usage=Usage(seconds=time.monotonic() - t0))
         usage = self._usage(resp.usage, time.monotonic() - t0)

@@ -2,7 +2,7 @@
 
 These are hand-written, FFE-style functions whose subsystem is known because
 we wrote them that way. They are NOT experiment-confirmed and never enter the
-ledger. Their only job is to exercise the eval harness and the CI gate before
+ledger. Their only job is to exercise the eval harness and the gate before
 the emulator produces real settled labels (then `ffelab eval export` takes
 over). Scores on them say little about how the agents do on the real game.
 

@@ -84,19 +84,22 @@ it into the Pydantic model. A refusal or invalid answer counts as wrong.
 Server-side model fallbacks are off on purpose: a silent switch to another
 model would make the report describe the wrong model.
 
-## CI
+## Gating a prompt change
 
-- `ci.yml`, every push and PR: unit tests, then the harness end to end with the
-  heuristic floor against `evals/baselines/heuristic-*.json` (free, deterministic).
-- `evals.yml`, PRs that touch `.claude/agents/`, the eval code or `evals/`, and
-  manual runs (pick the model): runs both agents with Claude and fails the PR
-  if they fall below `evals/baselines/blind-labeller.json` / `red-team.json`.
-  Needs the `ANTHROPIC_API_KEY` repository secret; without it the job warns and
-  skips. Not measured yet; the estimate is under $1 per smoke set on Opus 5.5, most of it thinking tokens.
+There is no CI: evals are run by hand. Before keeping a change to an agent's
+prompt (or switching its model), run the eval and gate it:
+
+```bash
+ffelab eval run --dataset evals/datasets/smoke_blind.jsonl --out reports/new.json
+ffelab eval gate --report reports/new.json --baseline evals/baselines/blind-labeller.json
+```
+
+`gate` exits non-zero and lists what got worse. `evals/baselines/heuristic-*.json`
+pin the free regex floor, so a broken dataset or scorer shows up there first.
 
 The Claude baselines are marked **provisional**: no live run has set them yet.
 Until one does they only require matching the heuristic floor's accuracy, a
 Brier better than a coin flip (0.25), under 10% failed calls and under $2 a run.
-After the first green live run, download its report artifact and run
-`ffelab eval baseline` to replace them with measured numbers (minus a margin for
-run-to-run noise). With real data, gate on the `test` split.
+After the first run you trust, `ffelab eval baseline` replaces them with
+measured numbers (minus a margin for run-to-run noise). With real data, gate on
+the `test` split.
