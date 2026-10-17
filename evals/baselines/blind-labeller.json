@@ -1,0 +1,14 @@
+{
+ "task": "blind_label",
+ "dataset": "evals/datasets/smoke_blind.jsonl",
+ "split": "all",
+ "solver_prefix": "claude",
+ "min_accuracy": 0.3571,
+ "max_brier": 0.25,
+ "max_ece": null,
+ "max_error_rate": 0.1,
+ "max_cost_usd": 2.0,
+ "status": "provisional",
+ "note": "Not measured yet. Until a real run replaces these numbers (ffelab eval baseline), the blind-labeller agent must at least match the heuristic floor's accuracy, beat a coin flip on Brier (0.25), fail on under 10% of cases and cost under $2 a run.",
+ "source_report": {}
+}

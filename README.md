@@ -26,11 +26,11 @@ segment.py   tables, propagate   loop, knockout, harness       ledger, adversary
 ```bash
 git clone https://github.com/corpsofengineers/ffed3d ../ffed3d   # the asm source
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[agent,dev]"
+pip install -e ".[agent,evals,dev]"
 
 ffelab build --src ../ffed3d               # → ffe.db, data/module_map.json, docs/MODULE_MAP.md
 ffelab exe-check path/to/FIRSTENC.EXE      # is your game exe the build the asm describes?
-python -m pytest                            # 53 tests
+python -m pytest                            # 70 tests
 FFED3D_DIR=../ffed3d python -m pytest       # also runs the real-data test
 ```
 
@@ -42,6 +42,7 @@ FFED3D_DIR=../ffed3d python -m pytest       # also runs the real-data test
 | `ffelab exe-check EXE [--map]` | Check an exe against the asm's layout; store a per-binary address map (identity, or aligned by content for other builds) |
 | `ffelab export --src DIR [--auto]` | Write confirmed names into a copy of `ffe.asm` as alias labels, plus a reviewable diff |
 | `ffelab uncertain` | The most uncertain functions, where the agent should look next |
+| `ffelab eval run / gate / compare / export` | Score the blind labeller and red team against experiment-confirmed labels; gate CI on it (see `docs/EVALS.md`) |
 | `python -m ffelab.mcp_server` | The MCP server agents use (31 tools) |
 
 ## Modules
@@ -51,9 +52,10 @@ FFED3D_DIR=../ffed3d python -m pytest       # also runs the real-data test
 | `asm.py` | Parses `ffe.asm`: functions, original `Pos` offsets, calls, DATA refs, prologue, alignment, filler |
 | `tables.py` | Finds function-pointer tables in `ffedat.asm`, incl. the 12-slot **module event tables** |
 | `segment.py` | Scores every gap between functions as a possible file boundary; learns weights from inherited names; event tables anchor modules |
+| `models.py` | Pydantic models for every record (experiments, evidence, bets, contradictions, halts, tool inputs, agent verdicts): the shared schema |
 | `ledger.py` | Beliefs over subsystem labels, Bayes updates, bets with Brier scoring, reliability per source and domain, contradictions, information gain |
 | `labels.py` | Open hierarchical label paths (`render/planet/atmosphere/clouds`) and the growing vocabulary |
-| `halt.py` | `HaltSnapshot` and the rules that turn a halt into label likelihoods |
+| `halt.py` | The rules that turn a halt into label likelihoods |
 | `loop.py` | Logging passes and halts; records experiments, auto-resolves bets |
 | `behavior.py` | Scenario tags, activity fingerprints, one-tag contrasts, behaviour groups |
 | `propagate.py` | Label evidence for callers from their callees (experiments > beliefs > inherited names) |
@@ -63,6 +65,7 @@ FFED3D_DIR=../ffed3d python -m pytest       # also runs the real-data test
 | `export.py` | Confirmed names → alias labels in a copy of the asm |
 | `harness/` | `GameBackend` interface, `FakeBackend`, `EmulatorBackend` (QEMU / DOSBox-X), GDB client |
 | `mcp_server.py` | The agent tool surface |
+| `evals/` | Eval harness: cases from settled labels, Claude / heuristic / replay solvers, metrics, CI gate |
 
 Agents: `.claude/agents/red-team.md` and `.claude/agents/blind-labeller.md`
 (Claude Code subagents, each limited to the tools its role needs).
@@ -88,6 +91,8 @@ See `docs/MODULE_MAP.md` for the full table.
 - **Claims settle on experiment evidence alone**; agreeing opinions settle nothing.
 - **Contradictions block naming** until closed as `explained` or `claim_withdrawn`.
 - **Everyone is calibration-scored**, including you and the red team.
+- **Agent output is validated** against Pydantic models before it touches the
+  ledger: a confidence of 1.3 or a made-up label is rejected, not stored.
 
 ## Hooking up an agent
 
@@ -111,7 +116,7 @@ to a JSON `EmulatorConfig`, e.g. `{"binary": "<id from exe-check>", "code_base":
 ## Status
 
 - Working: static map, ledger, adversarial layer, fingerprints, propagation,
-  knockouts, exe-check, export. 53 tests, unit-tested against fakes plus one
+  knockouts, exe-check, export, Pydantic models, eval harness with CI gate. 70 tests, unit-tested against fakes plus one
   real-data test.
 - **Not yet run against a live emulator.** Expect one session of tuning key maps,
   timings and the code base address.

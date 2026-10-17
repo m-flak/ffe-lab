@@ -28,6 +28,7 @@ import os
 from . import labels as lbl
 from .harness.backend import GameBackend
 from .ledger import Ledger
+from .models import KnockoutObservationInput
 
 VISIBLE_THRESHOLD = 0.0005          # fraction of changed pixels counted as a visible effect
 PIXEL_DELTA = 24                    # per-pixel intensity change counted as 'changed'
@@ -141,6 +142,8 @@ def _resolve_knockout_bets(ledger: Ledger, exp: int, scenario: str, func: int, o
 def record_observation(ledger: Ledger, experiment_id: int, func: int, path: str, confidence: float,
                        description: str, source: str) -> dict:
     """What disappeared or changed in a knockout, as a label path, tied to the experiment."""
+    KnockoutObservationInput(experiment_id=experiment_id, func=func, path=path, confidence=confidence,
+                             description=description, source=source)
     exp = ledger.con.execute("SELECT * FROM experiments WHERE id=?", (experiment_id,)).fetchone()
     if exp is None or exp["kind"] != "knockout":
         raise ValueError("observations must cite a knockout experiment")

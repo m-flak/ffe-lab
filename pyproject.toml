@@ -4,14 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ffelab"
-version = "0.4.0"
+version = "0.5.0"
 description = "Evidence-driven, agent-assisted reverse engineering of Frontier: First Encounters"
 requires-python = ">=3.10"
-dependencies = ["numpy>=1.24", "pillow>=10"]
+dependencies = ["numpy>=1.24", "pillow>=10", "pydantic>=2.7"]
 
 [project.optional-dependencies]
 agent = ["mcp>=1.0"]
 emu = ["unicorn>=2.0"]
+evals = ["anthropic>=1.0"]
 dev = ["pytest>=7"]
 
 [project.scripts]

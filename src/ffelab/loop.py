@@ -12,6 +12,7 @@ from . import behavior
 from .halt import RULES, HaltSnapshot, score_halt, score_never_hit
 from .harness.backend import GameBackend
 from .ledger import Ledger
+from .models import LoggingPassResult
 
 
 def hit_model(context: list[str], labels: list[str], base: float = 0.3) -> dict[str, dict[str, float]]:
@@ -63,9 +64,9 @@ def logging_pass(backend: GameBackend, ledger: Ledger, scenario: str, funcs: lis
     for f, n in full_counts.items():
         behavior.record(ledger, f, scenario, n, frames, exp)
     ledger.con.commit()
-    return {"experiment": exp, "counts": full_counts,
-            "resolved": ledger.auto_resolve(exp, scenario, full_counts, frames),
-            "settled": ledger.settle_claims()}
+    return LoggingPassResult(experiment=exp, counts=full_counts,
+                             resolved=ledger.auto_resolve(exp, scenario, full_counts, frames),
+                             settled=ledger.settle_claims()).model_dump()
 
 
 def halt_and_score(backend: GameBackend, ledger: Ledger, scenario: str, func: int,

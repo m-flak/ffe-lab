@@ -12,6 +12,7 @@ Status as of v0.4. Ordered by when things should happen.
 | v0.2 | Adversarial layer: experiment-linked bet resolution, experiment-only claim settlement, contradictions, red team, blind second opinions, calibration audit |
 | v0.3 | Cold start: fingerprints, one-tag contrasts, behaviour groups, callee propagation, knockouts with noise-masked diffs, open label paths |
 | v0.4 | `exe-check` + content-based address mapping between builds; `export` of confirmed names into the asm as alias labels |
+| v0.5 | Pydantic models for every record (`models.py`); eval harness (`ffelab eval`) for the blind labeller and red team; tests + offline evals in CI, live agent evals gated on `evals/baselines/` (needs `ANTHROPIC_API_KEY`) |
 
 ---
 
@@ -29,6 +30,10 @@ solves a real problem in ffelab. Keep SQLite as a zero-setup "lite mode".
   Brier/calibration, cost and tokens per correct label. Compare models and
   prompts. Candidates: Inspect AI, promptfoo, or a small custom harness.
 - Run evals in CI so a prompt change that makes agents worse fails the build.
+- **Status (v0.5): built.** Custom harness chosen (D11). Remaining: once the
+  emulator settles labels, `ffelab eval export` real cases, run the agents,
+  replace the provisional baselines with `ffelab eval baseline`, and gate on
+  the `test` split. Until then CI runs on synthetic smoke cases.
 
 ### 2. Claude Agent SDK orchestrator + tracing
 - Own the agent loop as a program instead of only through Claude Code:

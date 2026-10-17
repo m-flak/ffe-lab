@@ -25,6 +25,7 @@ from . import labels as lbl
 from .halt import RULES
 from .ledger import Ledger
 from .loop import hit_model
+from .models import AttackInput, AttackResult, BlindLabelInput
 
 NAME_SUFFIX_RE = re.compile(r"\b(_?FUNC_\d+)_\w+")
 NAMED_DATA_RE = re.compile(r"\b_DATA_[A-Za-z]\w*")
@@ -100,8 +101,7 @@ def place_attack(ledger: Ledger, claim_bet: int, scenario: str, rival: str,
     ``expect`` is what the *rival* hypothesis predicts ("hit" or "miss");
     ``prob`` is the adversary's honest probability that this happens.
     """
-    if expect not in ("hit", "miss"):
-        raise ValueError("expect must be 'hit' or 'miss'")
+    AttackInput(claim_bet=claim_bet, scenario=scenario, rival=rival, expect=expect, prob=prob, source=source)
     bet = ledger.con.execute("SELECT * FROM bets WHERE id=?", (claim_bet,)).fetchone()
     if bet is None or bet["kind"] != "claim":
         raise ValueError(f"bet {claim_bet} is not a claim")
@@ -117,8 +117,8 @@ def place_attack(ledger: Ledger, claim_bet: int, scenario: str, rival: str,
                                 f"FUNC {f} will {expect} in {scenario}", prob, bet["domain"],
                                 spec={"scenario": scenario, "func": f, "expect": expect},
                                 parent_id=claim_bet)
-    return {"rival_bet": rival_bet, "prediction_bet": pred_bet,
-            "run": {"tool": "run_logging_pass", "scenario": scenario, "funcs": [f]}}
+    return AttackResult(rival_bet=rival_bet, prediction_bet=pred_bet,
+                        run={"tool": "run_logging_pass", "scenario": scenario, "funcs": [f]}).model_dump()
 
 
 def adversary_report(ledger: Ledger, source: str = "adversary") -> dict:
@@ -170,6 +170,7 @@ def blind_view(ledger: Ledger, func: int, hide_inherited: bool = True, max_lines
 
 def record_blind(ledger: Ledger, func: int, label: str, confidence: float, source: str) -> int:
     """Store a blind label. It also enters the ledger as an ordinary claim (an opinion)."""
+    BlindLabelInput(func=func, label=label, confidence=confidence, source=source)
     label = lbl.validate(label, ledger.labels)
     cur = ledger.con.execute("INSERT INTO blind_labels (func, source, label, confidence) VALUES (?,?,?,?)",
                              (func, source, label, confidence))

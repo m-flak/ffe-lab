@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+
+  # Free and deterministic: runs the harness end to end with the heuristic floor,
+  # so a broken dataset, scorer or gate fails the build even without an API key.
+  evals-offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Heuristic floor, blind labeller cases
+        run: |
+          ffelab eval run --solver heuristic --dataset evals/datasets/smoke_blind.jsonl --out reports/heuristic-blind.json
+          ffelab eval gate --report reports/heuristic-blind.json --baseline evals/baselines/heuristic-blind.json
+      - name: Heuristic floor, red-team cases
+        run: |
+          ffelab eval run --solver heuristic --dataset evals/datasets/smoke_redteam.jsonl --out reports/heuristic-redteam.json
+          ffelab eval gate --report reports/heuristic-redteam.json --baseline evals/baselines/heuristic-redteam.json
