@@ -24,6 +24,7 @@ try:
 except ImportError:                      # the 'durable' extra isn't installed
     WorkflowEnvironment = None
 
+import store
 from ffelab import db as dbmod
 from ffelab.harness.fake import FakeBackend
 
@@ -34,6 +35,13 @@ VISUALS = {"orbit": [(DRAW, (40, 60, 200, 100), (235, 235, 235))]}
 
 def step(kind, scenario, funcs, context=(), step_id=""):
     return StepRequest(kind=kind, scenario=scenario, funcs=funcs, context=list(context), step_id=step_id)
+
+
+def new_store(tmp):
+    """A SQLite file, or a fresh Postgres schema when FFELAB_TEST_PG is set."""
+    if store.PG_URL:
+        return store.pg_schema_url(store.new_schema())
+    return os.path.join(tmp, "ffe.db")
 
 
 def make_db(path):
@@ -104,7 +112,7 @@ class TestCampaign(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
-        self.db = os.path.join(self.tmp, "ffe.db")
+        self.db = new_store(self.tmp)
         make_db(self.db)
         self.shared = Shared()
 
@@ -155,8 +163,8 @@ class TestCampaign(unittest.TestCase):
 
     def test_hang_times_out_and_is_not_counted_twice(self):
         # The first attempt blocks in wait() past the heartbeat timeout. Temporal
-        # retries on a fresh backend; when the stuck thread wakes up it finds the
-        # step already recorded and drops its copy.
+        # retries on a fresh backend; when the stuck thread wakes up it loses the
+        # run key and rolls back having written nothing.
         self.shared.hang_first_wait = 5.0
         plan = CampaignPlan(name="hang", steps=[step("knockout", "orbit", [DRAW])], heartbeat_s=2)
         r = self.campaign(plan)
@@ -205,7 +213,7 @@ class TestRunKeys(unittest.TestCase):
     def test_same_step_twice_records_once(self):
         tmp = tempfile.mkdtemp()
         try:
-            db = os.path.join(tmp, "ffe.db")
+            db = new_store(tmp)
             make_db(db)
             acts = CampaignActivities(db, factory(Shared()), outdir=os.path.join(tmp, "ko"))
             req = step("knockout", "orbit", [DRAW], step_id="s00001")
@@ -218,6 +226,33 @@ class TestRunKeys(unittest.TestCase):
             self.assertEqual(con.execute("SELECT COUNT(*) FROM experiments").fetchone()[0], 1)
             self.assertEqual(con.execute("SELECT COUNT(*) FROM evidence").fetchone()[0], 1)
             con.close()
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+    def test_a_step_that_dies_mid_write_leaves_nothing(self):
+        from temporalio.exceptions import ApplicationError
+        from ffelab.workflows import activities
+        tmp = tempfile.mkdtemp()
+        try:
+            db = new_store(tmp)
+            make_db(db)
+            acts = CampaignActivities(db, factory(Shared()), outdir=os.path.join(tmp, "ko"))
+            req = step("knockout", "orbit", [DRAW], step_id="s00001")
+            real = activities.KeyedLedger.update
+
+            def boom(self, *a, **k):
+                raise RuntimeError("power cut")
+            activities.KeyedLedger.update = boom
+            try:
+                with self.assertRaises(ApplicationError):
+                    acts.run_step(req)
+            finally:
+                activities.KeyedLedger.update = real
+            con = dbmod.connect(db)
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM experiments").fetchone()[0], 0)
+            con.close()
+            self.assertFalse(acts.run_step(req).replayed)     # the rerun records it cleanly
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 

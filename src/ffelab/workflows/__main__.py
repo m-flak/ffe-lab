@@ -97,7 +97,7 @@ def main(argv=None) -> None:
     ap.add_argument("--queue", default=DEFAULT_QUEUE, help="task queue = emulator name")
     sub = ap.add_subparsers(dest="cmd", required=True)
     w = sub.add_parser("worker")
-    w.add_argument("--db", default="ffe.db")
+    w.add_argument("--db", default="ffe.db", help="SQLite path or postgresql:// URL")
     w.add_argument("--backend", default="fake", choices=["fake", "qemu", "dosbox-x"])
     w.add_argument("--emu", default="{}", help="JSON: EmulatorConfig fields (+ binary), or {truth} for fake")
     w.add_argument("--outdir", default="knockouts")

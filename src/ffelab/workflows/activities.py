@@ -1,10 +1,19 @@
 """Activities: the experiment steps a campaign runs, each safe to retry.
 
-Retry safety comes from a *run key* (workflow id + step id). The experiment row
-and its run key are committed together, so an attempt that finds its run key
-already recorded returns the stored result instead of running the experiment
-again: evidence is never counted twice, which keeps the ledger rule that only
-experiments settle bets honest under retries.
+Retry safety comes from a *run key* (workflow id + step id) on the experiment
+row (``Ledger.record_experiment(..., run_key=, if_exists="raise")``). From the
+experiment insert to the last evidence write, a step's ledger writes are one
+transaction (``Ledger.atomic``), so a step is recorded whole or not at all:
+
+* an attempt that finds its run key already recorded returns that experiment
+  instead of running it again, so evidence is never counted twice (the ledger
+  rule that only experiments settle bets stays honest under retries);
+* a timed-out attempt whose thread was still stuck and wakes up later loses the
+  key (``RunKeyExists``) and rolls back having written nothing;
+* an attempt that dies mid-step leaves no row, so the retry runs it cleanly.
+
+The transaction opens at the experiment insert, after the game interaction, so
+an attempt stuck in the emulator holds no database lock.
 
 Failures come in three kinds:
 * the **game** crashing during a knockout is a result (``outcome="crash"``),
@@ -20,9 +29,8 @@ dead attempt left behind (a save state restores memory).
 """
 from __future__ import annotations
 
-import json
-import sqlite3
 import threading
+from contextlib import ExitStack
 from typing import Callable
 
 from temporalio import activity
@@ -31,18 +39,10 @@ from temporalio.exceptions import ApplicationError
 from .. import db as dbmod
 from .. import knockout as ko
 from ..harness.backend import GameBackend
-from ..ledger import Ledger
+from ..ledger import Ledger, RunKeyExists
+from ..models import Experiment
 from ..loop import halt_and_score, logging_pass, rank_targets
 from .types import AutoPick, StepRequest, StepResult
-
-STEPS_SCHEMA = """
-CREATE TABLE IF NOT EXISTS campaign_steps (
-    run_key TEXT PRIMARY KEY,         -- workflow id / step id
-    experiment_id INTEGER,
-    result TEXT,                      -- JSON StepResult once the step finished
-    created TEXT DEFAULT CURRENT_TIMESTAMP
-);
-"""
 
 HARNESS_ERRORS = (OSError, ConnectionError, TimeoutError, EOFError)
 
@@ -57,29 +57,28 @@ def bad_input(msg: str) -> ApplicationError:
 
 
 class KeyedLedger(Ledger):
-    """A Ledger whose experiments carry the run key of the step that made them."""
+    """A Ledger for one campaign step: its experiment carries the step's run key,
+    and everything from that insert to the end of the ``with`` block is one
+    transaction."""
 
     def __init__(self, con, run_key: str, labels=None):
         super().__init__(con, labels)
         self.run_key = run_key
         self.experiment_id: int | None = None
+        self._stack = ExitStack()
 
-    def record_experiment(self, kind, scenario, detail=None):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return self._stack.__exit__(*exc)         # commit, or roll back on an exception
+
+    def record_experiment(self, kind, scenario, detail=None, run_key=None, if_exists="raise"):
         if self.experiment_id is not None:
             raise RuntimeError(f"step {self.run_key} tried to record a second experiment")
-        detail = dict(detail or {}, run_key=self.run_key)
-        cur = self.con.execute("INSERT INTO experiments (kind, scenario, detail) VALUES (?,?,?)",
-                               (kind, scenario, json.dumps(detail)))
-        self.experiment_id = int(cur.lastrowid)
-        try:
-            self.con.execute("INSERT INTO campaign_steps (run_key, experiment_id) VALUES (?,?)",
-                             (self.run_key, self.experiment_id))
-        except sqlite3.IntegrityError:
-            # A timed-out attempt that was still running got here first. Drop
-            # this copy; the next attempt finds the run key and replays it.
-            self.con.rollback()
-            raise HarnessError(f"step {self.run_key} was recorded by an earlier attempt") from None
-        self.con.commit()                        # experiment and run key land together
+        self._stack.enter_context(self.atomic())
+        self.experiment_id = super().record_experiment(kind, scenario, detail,
+                                                       run_key=self.run_key, if_exists="raise")
         return self.experiment_id
 
 
@@ -109,23 +108,17 @@ class Heartbeating:
 
 
 class CampaignActivities:
-    """Holds the ledger path and the one backend for this worker's emulator."""
+    """Holds the ledger target and the one backend for this worker's emulator.
 
-    def __init__(self, db_path: str, backend_factory: Callable[[], GameBackend],
+    ``db`` is a SQLite path or a ``postgresql://`` URL (see ``db.connect``)."""
+
+    def __init__(self, db: str, backend_factory: Callable[[], GameBackend],
                  outdir: str = "knockouts"):
-        self.db_path = db_path
+        self.db = db
         self.backend_factory = backend_factory
         self.outdir = outdir
         self._backend: GameBackend | None = None
         self._lock = threading.Lock()
-        con = dbmod.connect(db_path)
-        con.executescript(STEPS_SCHEMA)
-        con.close()
-
-    def _connect(self):
-        con = dbmod.connect(self.db_path)
-        con.executescript(STEPS_SCHEMA)
-        return con
 
     def backend(self, fresh: bool = False) -> GameBackend:
         with self._lock:
@@ -141,36 +134,37 @@ class CampaignActivities:
     def run_step(self, req: StepRequest) -> StepResult:
         info = activity.info() if activity.in_activity() else None
         run_key = f"{info.workflow_id}/{req.step_id}" if info else req.step_id
-        con = self._connect()
+        con = dbmod.connect(self.db)
         try:
-            row = con.execute("SELECT experiment_id, result FROM campaign_steps WHERE run_key=?",
-                              (run_key,)).fetchone()
-            if row is not None:
-                return _replayed(req, row)
+            led = KeyedLedger(con, run_key)
+            done = led.experiment_for_run(run_key)
+            if done is not None:
+                return _replayed(req, done)
             fresh = bool(info and info.attempt > 1)      # last attempt may have left it broken
             be = Heartbeating(self.backend(fresh=fresh))
-            led = KeyedLedger(con, run_key)
             try:
-                res = _run(be, led, req, self.outdir)
+                with led:
+                    return _run(be, led, req, self.outdir)
             except HarnessError:
                 self.reset_backend()
                 raise
+            except RunKeyExists:
+                # An earlier attempt recorded this step while we were running.
+                # Nothing of ours was written; the next attempt replays theirs.
+                raise ApplicationError(f"step {run_key} was recorded by an earlier attempt",
+                                       type="AlreadyRecorded") from None
             except ApplicationError:
                 raise
             except Exception as e:
                 # A bug, not a flaky emulator: retrying would fail the same way.
                 raise ApplicationError(f"{type(e).__name__}: {e}", type="StepBug",
                                        non_retryable=True) from e
-            con.execute("UPDATE campaign_steps SET result=? WHERE run_key=?",
-                        (res.model_dump_json(), run_key))
-            con.commit()
-            return res
         finally:
             con.close()
 
     @activity.defn
     def pick_targets(self, pick: AutoPick) -> list[StepRequest]:
-        con = self._connect()
+        con = dbmod.connect(self.db)
         try:
             led = Ledger(con)
             skip = set(pick.exclude)
@@ -194,7 +188,7 @@ def _run(be, led: KeyedLedger, req: StepRequest, outdir: str) -> StepResult:
         return StepResult(step_id=req.step_id, kind=req.kind, scenario=req.scenario,
                           experiment_id=r["experiment"], outcome="hits",
                           detail={"hit": hit, "missed": len(req.funcs) - hit,
-                           "resolved": len(r["resolved"]), "settled": len(r["settled"])})
+                                  "resolved": len(r["resolved"]), "settled": len(r["settled"])})
     if req.kind == "halt":
         snap = halt_and_score(be, led, req.scenario, req.funcs[0], req.context, keys=keys)
         return StepResult(step_id=req.step_id, kind=req.kind, scenario=req.scenario,
@@ -204,17 +198,21 @@ def _run(be, led: KeyedLedger, req: StepRequest, outdir: str) -> StepResult:
     return StepResult(step_id=req.step_id, kind=req.kind, scenario=req.scenario,
                       experiment_id=r["experiment"], outcome=r["outcome"],
                       detail={"func": req.funcs[0], "changed_frac": r.get("changed_frac"),
-                       "diff_image": r.get("diff_image"), "next": r.get("next")})
+                              "diff_image": r.get("diff_image"), "next": r.get("next")})
 
 
-def _replayed(req: StepRequest, row) -> StepResult:
-    if row["result"]:
-        res = StepResult.model_validate_json(row["result"])
-        res.replayed = True
-        return res
-    # The experiment committed but the attempt died before its evidence was all
-    # written. Don't rerun (that would double-count); flag it for review instead.
+def _replayed(req: StepRequest, exp: Experiment) -> StepResult:
+    """Rebuild a step's result from the experiment an earlier attempt recorded."""
+    d = exp.detail
+    if exp.kind == "logging_pass":
+        counts = d.get("counts", {})
+        hit = sum(1 for n in counts.values() if n)
+        outcome, detail = "hits", {"hit": hit, "missed": len(d.get("funcs", [])) - hit}
+    elif exp.kind == "halt":
+        outcome, detail = ("halted" if d.get("halted") else "timeout"), {"func": d.get("func")}
+    else:
+        outcome = d.get("outcome", "invisible")
+        detail = {"func": d.get("func"), "changed_frac": d.get("changed_frac"),
+                  "diff_image": (d.get("images") or {}).get("diff")}
     return StepResult(step_id=req.step_id, kind=req.kind, scenario=req.scenario,
-                      experiment_id=row["experiment_id"], outcome="partial",
-                      detail={"note": "attempt died after recording the experiment; evidence may be incomplete"},
-                      replayed=True)
+                      experiment_id=exp.id, outcome=outcome, detail=detail, replayed=True)
