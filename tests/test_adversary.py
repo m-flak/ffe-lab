@@ -4,13 +4,14 @@ import unittest
 
 from ffelab import adversary as adv
 from ffelab import db as dbmod
+from store import fresh_db
 from ffelab.harness.fake import FakeBackend
 from ffelab.ledger import Ledger
 from ffelab.loop import logging_pass
 
 
 def setup():
-    con = dbmod.connect(":memory:")
+    con = fresh_db()
     con.executemany("INSERT INTO functions (num, pos, ord, name, n_ins, has_frame, aligned4, asm_text)"
                     " VALUES (?,?,?,?,?,?,?,?)",
                     [(i, 0x1000 + 16 * i, i - 1, f"Thing{i}", 10, 1, 1,

@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from ffelab import db as dbmod
+from store import fresh_db
 from ffelab.evals import dataset as ds
 from ffelab.evals import runner
 from ffelab.evals import solvers as sv
@@ -14,7 +15,7 @@ REPO = Path(__file__).resolve().parents[1]
 
 
 def ledger():
-    con = dbmod.connect(":memory:")
+    con = fresh_db()
     con.executemany("INSERT INTO functions (num, pos, ord, name, n_ins, has_frame, aligned4, asm_text)"
                     " VALUES (?,?,?,?,?,?,?,?)",
                     [(i, 0x1000 + 16 * i, i - 1, f"FUNC_{i}_Secret", 5, 1, 1,

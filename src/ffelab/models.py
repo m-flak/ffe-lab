@@ -99,10 +99,11 @@ ExperimentKind = Literal["logging_pass", "halt", "knockout", "unicorn", "static_
 class Experiment(Record):
     """A recorded run. Only experiments resolve bets (DECISIONS D3).
 
-    Reserved for PLAN step 4 (durable campaigns), not implemented yet: a unique
-    ``run_key`` so a retried step returns the existing experiment instead of
-    recording it twice, and keeping a game crash (a result, e.g. knockout
-    health ``crashed``) separate from a harness failure (an error to retry).
+    ``run_key`` (unique, optional) names one step of a durable campaign (PLAN
+    step 4), so a retried step returns the existing experiment instead of
+    recording it twice. Still to do in step 4: keeping a game crash (a result,
+    e.g. knockout health ``crashed``) separate from a harness failure (an error
+    to retry).
     """
     table = "experiments"
     _json = ("detail",)
@@ -111,6 +112,7 @@ class Experiment(Record):
     scenario: str
     detail: dict[str, Any] = Field(default_factory=dict)
     created: datetime | None = None
+    run_key: str | None = None
 
 
 EvidenceKind = Literal["call", "static_callee", "log_hit", "log_miss", "halt", "halt_timeout",

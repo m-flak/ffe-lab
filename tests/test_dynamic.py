@@ -5,6 +5,7 @@ import threading
 import unittest
 
 from ffelab import db as dbmod
+from store import fresh_db
 from ffelab.halt import HaltSnapshot, score_halt, score_never_hit
 from ffelab.harness.fake import FakeBackend
 from ffelab.harness.gdb import GdbRemote, checksum
@@ -13,7 +14,7 @@ from ffelab.loop import logging_pass, rank_targets, halt_and_score
 
 
 def ledger():
-    con = dbmod.connect(":memory:")
+    con = fresh_db()
     con.executemany("INSERT INTO functions (num) VALUES (?)", [(i,) for i in range(1, 6)])
     return Ledger(con)
 

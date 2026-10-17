@@ -48,6 +48,14 @@ solves a real problem in ffelab. Keep SQLite as a zero-setup "lite mode".
   SQLite path for single-user/lite mode.
 - pgvector for embeddings of normalised asm and fingerprints, giving the
   labeller "find functions like this one" retrieval.
+- **Status: built** (D13). `FFELAB_DB=postgresql:///ffelab` switches every
+  command and the MCP server; `ffelab db copy` moves an existing `ffe.db` over;
+  `ffelab embed` / `ffelab similar` and the `similar_functions` tool do the
+  retrieval (pgvector HNSW index on Postgres, NumPy scan on SQLite). Concurrent
+  belief updates are locked per function; experiments take an optional unique
+  `run_key` for item 4. Remaining: measure with the eval harness whether giving
+  the blind labeller `similar_functions` improves its accuracy before adding the
+  tool to its agent file.
 
 ### 4. Durable experiment campaigns (Temporal or Prefect)
 - Long experiment runs as durable workflows: an emulator crash or hang retries

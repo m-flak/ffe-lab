@@ -40,7 +40,8 @@ def register(con: sqlite3.Connection, path: str, created_by: str, description: s
     for i in range(1, len(parts) + 1):
         sub = "/".join(parts[:i])
         parent = "/".join(parts[:i - 1]) or None
-        con.execute("INSERT OR IGNORE INTO vocabulary (path, parent, description, created_by) VALUES (?,?,?,?)",
+        con.execute("INSERT INTO vocabulary (path, parent, description, created_by) VALUES (?,?,?,?)"
+                    " ON CONFLICT (path) DO NOTHING",
                     (sub, parent, description if i == len(parts) else "", created_by))
         if description and i == len(parts):
             con.execute("UPDATE vocabulary SET description=? WHERE path=? AND (description IS NULL OR description='')",
