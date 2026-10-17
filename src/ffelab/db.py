@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 
 from .asm import Function
@@ -171,12 +172,22 @@ def dialect(con) -> str:
     return getattr(con, "dialect", "sqlite")
 
 
+class SqliteConnection(sqlite3.Connection):
+    """sqlite3 connection whose ``commit()`` waits while an ``atomic()`` block is open."""
+    dialect = "sqlite"
+    hold = 0
+
+    def commit(self) -> None:
+        if not self.hold:
+            super().commit()
+
+
 def connect(target: str | Path):
     """Open (and create or migrate) the store. A ``postgresql://`` URL selects
     Postgres; anything else is a SQLite file path (or ``:memory:``)."""
     if is_postgres_url(target):
         return _connect_pg(str(target))
-    con = sqlite3.connect(str(target), timeout=30)
+    con = sqlite3.connect(str(target), timeout=30, factory=SqliteConnection)
     con.row_factory = sqlite3.Row
     con.executescript(SCHEMA.replace(" VECTOR,", " BLOB,"))
     _migrate(con)
@@ -269,6 +280,32 @@ def ingest(con, funcs: list[Function], tables: list[Table]) -> None:
                     [(f.num, d) for f in funcs for d in set(f.data_refs)])
     con.executemany("INSERT INTO tables VALUES (?,?,?,?,?)",
                     [(t.label, t.data_num, t.comment, t.kind, json.dumps(t.slots)) for t in tables])
+    con.commit()
+
+
+@contextmanager
+def atomic(con):
+    """All writes inside the block land together or not at all.
+
+    Every ``commit()`` inside (the ledger commits after each write) waits for the
+    end of the block; an exception rolls the whole block back. Nested blocks join
+    the outer one. Locks taken inside (``lock``) are held until the end, so keep
+    blocks to one experiment's worth of work."""
+    if con.hold:
+        yield con
+        return
+    if dialect(con) == "postgres":
+        con.begin()
+    elif not con.in_transaction:
+        con.execute("BEGIN IMMEDIATE")
+    con.hold = 1
+    try:
+        yield con
+    except BaseException:
+        con.hold = 0
+        con.rollback()
+        raise
+    con.hold = 0
     con.commit()
 
 

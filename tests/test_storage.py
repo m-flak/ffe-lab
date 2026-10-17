@@ -9,7 +9,7 @@ import unittest
 
 from ffelab import db as dbmod
 from ffelab import embed
-from ffelab.ledger import AlreadyResolved, Ledger
+from ffelab.ledger import AlreadyResolved, Ledger, RunKeyExists
 from store import PG_URL, fresh_db, shared_store
 
 
@@ -70,6 +70,60 @@ class TestRunKey(unittest.TestCase):
         e = L.record_experiment("halt", "s")
         created = L.con.execute("SELECT created FROM experiments WHERE id=?", (e,)).fetchone()["created"]
         self.assertRegex(created, r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$")
+
+
+class TestAtomicSteps(unittest.TestCase):
+    """A campaign step whose timed-out attempt (a "zombie") may still be running."""
+
+    def step(self, L, key, fail_after_record=False):
+        with L.atomic():
+            e = L.record_experiment("logging_pass", "s", {"funcs": [1]}, run_key=key, if_exists="raise")
+            L.update(1, {"render": 3.0}, "halt", "log_hit", experiment_id=e)
+            if fail_after_record:
+                raise ConnectionError("emulator died mid-step")
+            L.update(1, {"render": 2.0}, "halt", "log_hit", experiment_id=e)
+        return e
+
+    def counts(self, L):
+        return (L.con.execute("SELECT COUNT(*) AS n FROM experiments").fetchone()["n"],
+                L.con.execute("SELECT COUNT(*) AS n FROM evidence").fetchone()["n"])
+
+    def test_loser_writes_nothing(self):
+        L = Ledger(seed(fresh_db(), {1: "ret"}))
+        e = self.step(L, "wf/1")
+        before = (L.belief(1), self.counts(L))
+        with self.assertRaises(RunKeyExists):
+            self.step(L, "wf/1")
+        self.assertEqual((L.belief(1), self.counts(L)), before)
+        self.assertEqual(L.experiment_for_run("wf/1").id, e)
+        self.assertEqual(L.record_experiment("halt", "s", run_key="wf/1"), e)   # default mode still returns it
+
+    def test_crash_mid_step_leaves_no_half_experiment(self):
+        L = Ledger(seed(fresh_db(), {1: "ret"}))
+        with self.assertRaises(ConnectionError):
+            self.step(L, "wf/2", fail_after_record=True)
+        self.assertEqual(self.counts(L), (0, 0))
+        self.assertIsNone(L.experiment_for_run("wf/2"))
+        self.step(L, "wf/2")                             # the retry records it cleanly
+        self.assertEqual(self.counts(L), (1, 2))
+
+    def test_racing_attempts_one_wins(self):
+        connect = shared_store()
+        seed(connect(), {1: "ret"})
+        start, results = threading.Barrier(4), []
+
+        def attempt():
+            L = Ledger(connect())
+            start.wait()
+            try:
+                results.append(self.step(L, "wf/3"))
+            except RunKeyExists:
+                results.append("lost")
+
+        threads = [threading.Thread(target=attempt) for _ in range(4)]
+        [t.start() for t in threads]; [t.join() for t in threads]
+        self.assertEqual(results.count("lost"), 3)
+        self.assertEqual(self.counts(Ledger(connect())), (1, 2))
 
 
 class TestConcurrentAgents(unittest.TestCase):

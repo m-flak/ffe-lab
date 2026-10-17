@@ -89,6 +89,7 @@ _WRITES = ("insert", "update", "delete", "replace", "create", "alter", "drop")
 
 class PgConnection:
     dialect = "postgres"
+    hold = 0                                                # > 0 inside db.atomic(): commit() waits
 
     def __init__(self, raw: "psycopg.Connection"):
         self.raw = raw
@@ -105,7 +106,7 @@ class PgConnection:
             self.in_transaction = True
 
     def commit(self) -> None:
-        if self.in_transaction:
+        if self.in_transaction and not self.hold:
             self.raw.execute("COMMIT")
             self.in_transaction = False
 
@@ -139,7 +140,8 @@ class PgConnection:
             else:
                 cur.execute(translate(sql, False))
         except Exception:
-            self.rollback()                                 # a failed statement aborts the transaction
+            if not self.hold:                               # a failed statement aborts the transaction;
+                self.rollback()                             # inside atomic() the block's exit rolls back
             raise
         return cur
 
@@ -149,7 +151,8 @@ class PgConnection:
         try:
             cur.executemany(translate(sql, True), [tuple(p) for p in seq])
         except Exception:
-            self.rollback()
+            if not self.hold:
+                self.rollback()
             raise
         return cur
 

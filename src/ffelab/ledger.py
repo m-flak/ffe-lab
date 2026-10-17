@@ -44,6 +44,10 @@ class AlreadyResolved(ValueError):
     """The bet was resolved already, possibly by another agent a moment ago."""
 
 
+class RunKeyExists(ValueError):
+    """``record_experiment(..., if_exists="raise")``: this campaign step was recorded already."""
+
+
 def entropy(dist: dict[str, float]) -> float:
     return -sum(p * math.log2(p) for p in dist.values() if p > 0)
 
@@ -158,19 +162,34 @@ class Ledger:
         return post
 
     # ------------------------------------------------------------ experiments
+    def atomic(self):
+        """``with ledger.atomic(): ...``: everything written inside lands together
+        or not at all (see ``db.atomic``)."""
+        return db.atomic(self.con)
+
     def record_experiment(self, kind: str, scenario: str, detail: dict | None = None,
-                          run_key: str | None = None) -> int:
+                          run_key: str | None = None, if_exists: str = "return") -> int:
         """Store an experiment and return its id.
 
         ``run_key`` names one step of a durable campaign (e.g. workflow id + step
-        id). It is unique: recording the same key again returns the existing id
-        instead of a second row, so a retried step can't count as two
-        experiments. Check ``experiment_for_run`` first to skip work already done."""
+        id). It is unique, so a retried step can't count as two experiments.
+        Recording a key that exists returns the existing id (``if_exists="return"``)
+        or raises ``RunKeyExists`` (``"raise"``).
+
+        For a step whose earlier attempt may still be running (a timed-out
+        "zombie"), use ``"raise"`` inside ``ledger.atomic()`` around the whole
+        step: the experiment, its key and its evidence then commit together, and
+        whichever attempt loses the key rolls back having written nothing. On
+        Postgres the loser waits at this insert until the winner commits."""
+        if if_exists not in ("return", "raise"):
+            raise ValueError("if_exists must be 'return' or 'raise'")
         row = self.con.execute(
             "INSERT INTO experiments (kind, scenario, detail, run_key) VALUES (?,?,?,?)"
             " ON CONFLICT (run_key) DO NOTHING RETURNING id",
             (kind, scenario, json.dumps(detail or {}), run_key)).fetchone()
         if row is None:                                    # the key was recorded before
+            if if_exists == "raise":
+                raise RunKeyExists(f"run {run_key!r} is already recorded")
             row = self.con.execute("SELECT id FROM experiments WHERE run_key=?", (run_key,)).fetchone()
         self.con.commit()
         return int(row["id"])

@@ -104,8 +104,11 @@ two agents can't both update from the same prior and lose one update. A bet
 resolves once: the first resolver wins, the rest get `AlreadyResolved`.
 *Retries:* `experiments.run_key` is unique and optional; recording the same key
 again returns the existing experiment, so a retried campaign step (PLAN 4)
-can't count as two experiments. Skipping a repeat's evidence is the campaign
-code's job (`Ledger.experiment_for_run`).
+can't count as two experiments. For a step whose timed-out attempt may still
+be running, `record_experiment(..., if_exists="raise")` inside
+`with ledger.atomic():` makes the experiment, its key and its evidence one
+transaction: the attempt that loses the key raises `RunKeyExists` and writes
+nothing, and a crash mid-step leaves no half-recorded experiment.
 *Similarity:* embeddings are local, deterministic hashed instruction n-grams and
 scenario hit rates, not an embedding API: free, reproducible, no key, and
 built from code with names stripped, so results (function numbers and scores
