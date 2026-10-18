@@ -155,6 +155,7 @@ def blind_view(ledger: Ledger, func: int, hide_inherited: bool = True, max_lines
             seg = {"seg": s["seg"], "size": s["last_ord"] - s["first_ord"] + 1,
                    "position_in_segment": row["ord"] - s["first_ord"],
                    "anchor_tables": json.loads(s["anchors"] or "[]")}
+    g = con.execute("SELECT height, depth, cycle_size FROM graph_features WHERE func=?", (func,)).fetchone()
     return {
         "func": func, "pos": hex(row["pos"]) if row["pos"] is not None else None,
         "instructions": row["n_ins"], "has_frame": bool(row["has_frame"]),
@@ -163,6 +164,8 @@ def blind_view(ledger: Ledger, func: int, hide_inherited: bool = True, max_lines
         "callees": sorted({r["callee"] for r in con.execute("SELECT callee FROM calls WHERE caller=?", (func,))}),
         "data_refs": sorted({r["data"] for r in con.execute("SELECT data FROM data_refs WHERE func=?", (func,))}),
         "segment": seg,
+        # call layers (structure only): chain length below and above, size of the call cycle it's in
+        "call_layers": {"height": g["height"], "depth": g["depth"], "cycle_size": g["cycle_size"]} if g else None,
         "asm": "\n".join(lines[:max_lines]) + (f"\n... ({len(lines) - max_lines} more lines)" if len(lines) > max_lines else ""),
         "inherited_name": None if hide_inherited else row["name"],
     }
@@ -172,11 +175,12 @@ def record_blind(ledger: Ledger, func: int, label: str, confidence: float, sourc
     """Store a blind label. It also enters the ledger as an ordinary claim (an opinion)."""
     BlindLabelInput(func=func, label=label, confidence=confidence, source=source)
     label = lbl.validate(label, ledger.labels)
-    cur = ledger.con.execute("INSERT INTO blind_labels (func, source, label, confidence) VALUES (?,?,?,?)",
-                             (func, source, label, confidence))
+    blind_id = ledger.con.execute(
+        "INSERT INTO blind_labels (func, source, label, confidence) VALUES (?,?,?,?) RETURNING id",
+        (func, source, label, confidence)).fetchone()["id"]
     ledger.con.commit()
     ledger.call(func, label, confidence, source=source, detail="blind")
-    return int(cur.lastrowid)
+    return int(blind_id)
 
 
 def reveal(ledger: Ledger, func: int) -> list[dict]:

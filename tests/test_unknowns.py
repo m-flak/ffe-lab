@@ -13,6 +13,7 @@ import unittest
 
 from ffelab import behavior, db as dbmod, knockout as ko, labels as lbl, propagate as prop
 from ffelab import adversary as adv
+from store import fresh_db
 from ffelab.harness.fake import FakeBackend
 from ffelab.ledger import Ledger
 from ffelab.loop import logging_pass
@@ -36,7 +37,7 @@ VISUALS = {"orbit_atmo": [(TERRAIN, (0, 120, 319, 199), (40, 140, 40)),
 
 
 def world():
-    con = dbmod.connect(":memory:")
+    con = fresh_db()
     rows = [(CLOUDS, None, None), (SHADOWS, None, None), (TERRAIN, None, None),
             (DOCKUI, None, None), (TEX, "Tex64Trans", "Tex"), (CORE, None, None)]
     con.executemany("INSERT INTO functions (num, name, prefix, asm_text) VALUES (?,?,?,'ret')", rows)

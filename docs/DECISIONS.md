@@ -89,6 +89,56 @@ dev, only read the test score.
 (the red team running real experiments), or a model-graded rubric. That is the
 point to move to Inspect, likely alongside the Agent SDK orchestrator (PLAN 2).
 
+### D13. Postgres beside SQLite: one schema, plain SQL, a thin adapter (no ORM)
+`db.connect()` picks the backend from its argument: a file path is SQLite (lite
+mode, still the default), a `postgresql://` URL is Postgres. The schema is
+written once, in SQLite's dialect, and rendered for Postgres (identity ids,
+8-byte floats, a pgvector column). Queries are SQL both accept (`ON CONFLICT`
+upserts, `RETURNING id`); `pg.py` only translates placeholders and timestamps
+and makes rows look like `sqlite3.Row`. An ORM (SQLAlchemy) was rejected: it
+would mean rewriting every module's queries to gain little, and `models.py`
+(D12's Pydantic records) is already the typed layer.
+*Concurrent agents:* a function's belief is read, updated and written under a
+per-function lock (a Postgres advisory lock; `BEGIN IMMEDIATE` on SQLite), so
+two agents can't both update from the same prior and lose one update. A bet
+resolves once: the first resolver wins, the rest get `AlreadyResolved`.
+*Retries:* `experiments.run_key` is unique and optional; recording the same key
+again returns the existing experiment, so a retried campaign step (PLAN 4)
+can't count as two experiments. For a step whose timed-out attempt may still
+be running, `record_experiment(..., if_exists="raise")` inside
+`with ledger.atomic():` makes the experiment, its key and its evidence one
+transaction: the attempt that loses the key raises `RunKeyExists` and writes
+nothing, and a crash mid-step leaves no half-recorded experiment.
+*Similarity:* embeddings are local, deterministic hashed instruction n-grams and
+scenario hit rates, not an embedding API: free, reproducible, no key, and
+built from code with names stripped, so results (function numbers and scores
+only) are safe for the blind labeller. They are hints for where to look and
+never evidence; they don't touch beliefs or bets.
+*Would change if:* the eval harness shows retrieval doesn't help labelling (drop
+it) or helps but misses (try a code embedding model, measured the same way);
+or the adapter's translations grow beyond a handful (then SQLAlchemy Core).
+
+### D16. Call-graph structure as static evidence: spectral basis, layers, quotient
+Functions get coordinates from the call graph's own spectral basis (32 smoothest
+Laplacian eigenvectors, stored as embedding `callgraph-spectral-v1`), call layers
+(height/depth with cycles collapsed) and a label quotient. Learned axes beat
+hand-picked ones (fan-in, fan-out, link-order distance): 5-NN family agreement
+63% vs 34% (chance 12%), above the code n-gram embedding's 50%. Two static
+evidence kinds come out of it: the neighbours' labels and the labels the quotient
+allows. Numbers and findings: `docs/GRAPH.md`.
+*Why static evidence, not a filter:* it shapes beliefs and experiment choice
+like callee propagation does, but never settles a claim or raises a
+contradiction (ledger rules, D3). Votes only use labels known without static
+evidence, so they can't feed on themselves.
+*Why unweighted, undirected:* call-site weights and direction (magnetic
+Laplacian) scored no better on the real graph; direction is used non-linearly,
+as call layers.
+*Blind labeller:* neighbour search returns numbers only and layers are
+structure only. The label vote uses others' labels and stays out of its view.
+*Would change if:* experiment-settled labels show the votes are miscalibrated
+(their source reliability drops; retune or drop the factors), or a learned
+model (PLAN "Later": node classification) beats them on the same hold-out.
+
 ---
 
 ## Open questions

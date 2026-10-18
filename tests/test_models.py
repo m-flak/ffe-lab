@@ -4,6 +4,7 @@ import unittest
 from pydantic import ValidationError
 
 from ffelab import db as dbmod
+from store import fresh_db
 from ffelab import models as m
 from ffelab.harness.fake import FakeBackend
 from ffelab.ledger import DEFAULT_LABELS, Ledger
@@ -11,7 +12,7 @@ from ffelab.loop import logging_pass
 
 
 def ledger():
-    con = dbmod.connect(":memory:")
+    con = fresh_db()
     con.executemany("INSERT INTO functions (num, pos, ord, name, n_ins, has_frame, aligned4, asm_text)"
                     " VALUES (?,?,?,?,?,?,?,?)",
                     [(i, 0x1000 + 16 * i, i - 1, None, 5, 1, 1, "push ebp\nret") for i in range(1, 4)])
@@ -22,9 +23,9 @@ def ledger():
 class TestSchema(unittest.TestCase):
     def test_every_record_matches_its_table(self):
         """The models are the shared schema: a column added to one side only fails here."""
-        con = dbmod.connect(":memory:")
+        con = fresh_db()
         for rec in m.RECORDS:
-            cols = {r["name"] for r in con.execute(f"PRAGMA table_info({rec.table})")}
+            cols = set(dbmod.columns(con, rec.table))
             self.assertEqual(cols, set(rec.model_fields), rec.__name__)
 
     def test_labels_have_one_source(self):

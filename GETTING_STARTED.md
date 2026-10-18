@@ -145,6 +145,45 @@ If it lists tools like `belief`, `blind_view`, `run_knockout`, you're connected.
 The two agents in `.claude/agents/` (`red-team`, `blind-labeller`) are picked up
 automatically; you invoke them by asking for them by name.
 
+### 4.4 Optional: Postgres, when several agents work at once
+
+`ffe.db` (SQLite) is fine for you plus one agent. When several agents write the
+ledger at the same time, or you want the "find functions like this one"
+search to run in the database, move to Postgres. Nothing else changes: same
+tables, same commands, same tools.
+
+```bash
+brew install postgresql@17 pgvector            # pgvector: the vector-search extension
+export PATH="$(brew --prefix postgresql@17)/bin:$PATH"   # versioned formula, not on PATH by default
+brew services start postgresql@17
+createdb ffelab
+pip install -e ".[pg]"                         # the Python driver (psycopg)
+
+ffelab db copy --from ffe.db --to postgresql:///ffelab   # copies everything, ids kept
+export FFELAB_DB=postgresql:///ffelab          # every ffelab command now uses Postgres
+ffelab embed                                   # vectors for similarity search
+ffelab similar 688                             # functions whose code looks like FUNC 688's
+ffelab graph build                             # call layers + call-graph basis (also works on SQLite)
+ffelab similar 688 --model callgraph-spectral-v1   # functions near 688 in the call graph
+ffelab graph check                             # how well the graph votes predict known labels
+ffelab graph vote                              # write them as static evidence (never settles anything)
+```
+
+Put the same URL in `.mcp.json` as `"FFELAB_DB": "postgresql:///ffelab"`.
+(Postgres.app, which bundles pgvector, works too.) To run the test suite on
+Postgres: `createdb ffelab_test`, then
+`FFELAB_TEST_PG=postgresql:///ffelab_test python -m pytest`.
+
+Terms: an *embedding* is a list of numbers describing a function, built so
+similar functions get similar lists; *similarity* is the cosine between two
+of them (1 = same, 0 = unrelated). ffelab's embeddings come from the code's
+instruction patterns with names stripped, and from which scenarios a function
+fires in. They point you at candidates; only experiments settle anything.
+The call-graph basis places functions by who calls whom; the *quotient* is the
+small label-to-label call graph you get by collapsing each labelled function to
+its label, which rules out most labels for a function from its labelled
+neighbours. Findings and numbers: `docs/GRAPH.md`.
+
 ---
 
 ## 5. The workflow in three stages
@@ -161,6 +200,8 @@ No emulator needed. You read code and make calls; the AI assists.
 | Look at a function | "Show me the blind view of FUNC 688 and explain what the code does." |
 | Record what you know | "Record a call: 688 is ai/traffic/spawning, 85% confidence, source human." |
 | Spread knowledge | "Run label propagation and tell me which functions moved most." |
+| Use the call graph | "Run graph_votes, then list unnamed functions whose belief moved most and why." |
+| Find suspect labels | "Show quotient_outliers and have the red team look at the confident claims there." |
 | Get a second opinion | "Use the blind-labeller agent on the first ten functions of segment 12." |
 | Find disagreements | "Reveal the blind labels for those and list disagreements with my calls." |
 | See what's most uncertain | "Which functions are most uncertain right now?" |
@@ -296,8 +337,8 @@ Ask for it in one go:
 
 Be aware of these so they don't surprise you:
 
-- **The AI-engineering stack** (Pydantic + evals, Agent SDK + tracing,
-  Postgres, Temporal/Prefect) — the next phase, see `docs/PLAN.md`.
+- **The rest of the AI-engineering stack** (Agent SDK + tracing,
+  Temporal/Prefect) — see `docs/PLAN.md`. Pydantic + evals and Postgres are built.
 - **A batched question queue** — the agent asks as it goes (comes with the Agent SDK step).
 - **A built-FFED3D backend** (linker-map symbols, compile-time counters) — optional.
 - **Call-site, return-value and data knockouts** — only whole-function knockouts exist.
@@ -368,6 +409,9 @@ and later will live in Postgres.
 | `ffelab: command not found` | `source .venv/bin/activate` first |
 | Claude Code shows no ffelab tools | Check `.mcp.json` uses full paths; restart Claude Code |
 | `ModuleNotFoundError: mcp` | `pip install -e ".[agent]"` |
+| "Postgres support needs psycopg" | `pip install -e ".[pg]"` |
+| `connection refused` on a `postgresql://` URL | `brew services start postgresql@17` |
+| `similar` says "has no ... embedding" | Run `ffelab embed` (again after new functions or logging passes); for `callgraph-spectral-v1`, `ffelab graph build` |
 | Tests fail on `TestRealData` | Set `FFED3D_DIR` to the ffed3d folder, or ignore (it's optional) |
 | "bets can only be resolved by a recorded experiment" | Working as intended: run the experiment first |
 | "has an open contradiction; resolve it before naming" | `show open contradictions`, then close it |

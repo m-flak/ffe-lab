@@ -40,7 +40,8 @@ def state_of(rate: float, hits: int) -> str:
 # ---------------------------------------------------------------- scenarios
 def register_scenario(ledger: Ledger, name: str, tags: list[str], notes: str = "") -> None:
     """Describe a save state with tags, e.g. ["near_planet", "atmosphere", "altitude_low"]."""
-    ledger.con.execute("INSERT OR REPLACE INTO scenarios (name, tags, notes) VALUES (?,?,?)",
+    ledger.con.execute("INSERT INTO scenarios (name, tags, notes) VALUES (?,?,?)"
+                       " ON CONFLICT (name) DO UPDATE SET tags=excluded.tags, notes=excluded.notes",
                        (name, json.dumps(sorted(set(tags))), notes))
     ledger.con.commit()
 

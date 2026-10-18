@@ -150,17 +150,19 @@ def align(data: bytes, funcs: list[tuple[int, int, bool]], radius: int = 0x8000,
 
 # ---------------------------------------------------------------- store / load
 def store(con: sqlite3.Connection, bin_id: str, path: str, report: dict, rows: list[dict]) -> None:
-    con.execute("INSERT OR REPLACE INTO binaries (id, path, size, verdict, match_rate) VALUES (?,?,?,?,?)",
+    con.execute("INSERT INTO binaries (id, path, size, verdict, match_rate) VALUES (?,?,?,?,?)"
+                " ON CONFLICT (id) DO UPDATE SET path=excluded.path, size=excluded.size,"
+                " verdict=excluded.verdict, match_rate=excluded.match_rate",
                 (bin_id, path, report["size"], report["verdict"], report["match_rate"]))
-    con.execute("DELETE FROM addr_maps WHERE binary=?", (bin_id,))
-    con.executemany("INSERT INTO addr_maps (binary, func, pos, confidence, method) VALUES (?,?,?,?,?)",
+    con.execute('DELETE FROM addr_maps WHERE "binary"=?', (bin_id,))   # quoted: a Postgres keyword
+    con.executemany('INSERT INTO addr_maps ("binary", func, pos, confidence, method) VALUES (?,?,?,?,?)',
                     [(bin_id, r["func"], r["mapped_pos"], r["confidence"], r["method"]) for r in rows])
     con.commit()
 
 
 def load_map(con: sqlite3.Connection, bin_id: str, min_conf: float = 0.0) -> dict[int, int]:
     return {r["func"]: r["pos"] for r in con.execute(
-        "SELECT func, pos FROM addr_maps WHERE binary=? AND confidence>=?", (bin_id, min_conf))}
+        'SELECT func, pos FROM addr_maps WHERE "binary"=? AND confidence>=?', (bin_id, min_conf))}
 
 
 def run(con: sqlite3.Connection, exe_path: str | Path, force_map: bool = False) -> dict:

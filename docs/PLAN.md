@@ -48,6 +48,21 @@ solves a real problem in ffelab. Keep SQLite as a zero-setup "lite mode".
   SQLite path for single-user/lite mode.
 - pgvector for embeddings of normalised asm and fingerprints, giving the
   labeller "find functions like this one" retrieval.
+- **Status: built** (D13). `FFELAB_DB=postgresql:///ffelab` switches every
+  command and the MCP server; `ffelab db copy` moves an existing `ffe.db` over;
+  `ffelab embed` / `ffelab similar` and the `similar_functions` tool do the
+  retrieval (pgvector HNSW index on Postgres, NumPy scan on SQLite). Concurrent
+  belief updates are locked per function; experiments take an optional unique
+  `run_key` for item 4. The blind labeller and red team have `similar_functions`
+  in their agent files (added with D16, at Matthew's request, before measuring).
+  Remaining: once experiments settle enough labels, `ffelab eval compare` the
+  agents with and without it, and drop it if it doesn't help.
+- **Call-graph structure: built** (D16, `docs/GRAPH.md`). `ffelab graph` adds a
+  spectral basis (`callgraph-spectral-v1`, searchable like the other embeddings),
+  call layers, and two static evidence kinds (neighbour vote, quotient check).
+  Remaining: once experiments settle labels, check the votes' calibration; run
+  the decisive halt in the text-engine cycle; match the maths half against a
+  Frontier: Elite II (68k) disassembly for the authorship question.
 
 ### 4. Durable experiment campaigns (Temporal or Prefect)
 - Long experiment runs as durable workflows: an emulator crash or hang retries

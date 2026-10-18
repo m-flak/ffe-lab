@@ -23,6 +23,7 @@ import json
 import math
 import sqlite3
 
+from . import db
 from . import labels as lbl
 from .models import TOP_LABELS, Bet, BetSpec, ClaimInput, Evidence, Experiment
 
@@ -34,9 +35,17 @@ PRIOR_RELIABILITY = {"human": 0.9, "ai": 0.6, "adversary": 0.6, "static": 0.6, "
 PRIOR_WEIGHT = 3.0
 FLOOR = 1e-4
 OPINION_KINDS = {"call"}                 # evidence kinds that are opinions, not experiments
-STATIC_KINDS = {"static_callee"}         # derived from code structure / inherited names, not runs
+STATIC_KINDS = {"static_callee", "static_graph_knn", "static_quotient"}  # from code structure / inherited names, not runs
 CONTRADICTION_RATIO = 0.25               # claimed label vs best rival, experiment evidence only
 CONTRADICTION_MIN_CONF = 0.7
+
+
+class AlreadyResolved(ValueError):
+    """The bet was resolved already, possibly by another agent a moment ago."""
+
+
+class RunKeyExists(ValueError):
+    """``record_experiment(..., if_exists="raise")``: this campaign step was recorded already."""
 
 
 def entropy(dist: dict[str, float]) -> float:
@@ -58,7 +67,8 @@ class Ledger:
         return {lab: d.get(lab, FLOOR) for lab in self.labels}
 
     def _store(self, func: int, dist: dict[str, float]) -> None:
-        self.con.executemany("INSERT OR REPLACE INTO beliefs VALUES (?,?,?)",
+        self.con.executemany("INSERT INTO beliefs (func, label, prob) VALUES (?,?,?)"
+                             " ON CONFLICT (func, label) DO UPDATE SET prob=excluded.prob",
                              [(func, lab, p) for lab, p in dist.items()])
 
     def set_prior(self, func: int, dist: dict[str, float]) -> None:
@@ -68,22 +78,28 @@ class Ledger:
     def update(self, func: int, likelihoods: dict[str, float], source: str,
                kind: str, detail: str = "", strength: float = 1.0,
                experiment_id: int | None = None) -> dict[str, float]:
-        """Bayes update. ``strength`` in [0,1] tempers the likelihood (L ** strength)."""
+        """Bayes update. ``strength`` in [0,1] tempers the likelihood (L ** strength).
+
+        Read, update and write happen under a per-function lock, so two agents
+        updating the same function can't both start from the same prior and
+        lose one update."""
+        db.lock(self.con, "belief", func)
         prior = self.belief(func)
         tempered = {lab: max(likelihoods.get(lab, 1.0), FLOOR) ** strength for lab in self.labels}
         post = _normalise({lab: prior[lab] * tempered[lab] for lab in self.labels})
         self._store(func, post)
-        cur = self.con.execute(
+        ev_id = self.con.execute(
             "INSERT INTO evidence (func, source, kind, likelihoods, detail, experiment_id)"
-            " VALUES (?,?,?,?,?,?)",
-            (func, source, kind, json.dumps(tempered), detail, experiment_id))
+            " VALUES (?,?,?,?,?,?) RETURNING id",
+            (func, source, kind, json.dumps(tempered), detail, experiment_id)).fetchone()["id"]
         self.con.commit()
         if kind not in OPINION_KINDS | STATIC_KINDS:
-            self._check_contradictions(func, int(cur.lastrowid))
+            self._check_contradictions(func, int(ev_id))
         return post
 
     def rebuild(self, func: int) -> dict[str, float]:
         """Recompute a belief from a uniform prior and every stored evidence row."""
+        db.lock(self.con, "belief", func)
         dist = {lab: 1.0 for lab in self.labels}
         for r in self.con.execute("SELECT likelihoods FROM evidence WHERE func=?", (func,)):
             like = json.loads(r["likelihoods"])
@@ -98,6 +114,7 @@ class Ledger:
                          detail: str = "") -> dict[str, float]:
         """Swap out this function's evidence of ``kind`` (idempotent re-derivation, e.g.
         propagation re-run after neighbours change) and rebuild its belief."""
+        db.lock(self.con, "belief", func)
         self.con.execute("DELETE FROM evidence WHERE func=? AND kind=?", (func, kind))
         tempered = {lab: max(likelihoods.get(lab, 1.0), FLOOR) for lab in self.labels}
         self.con.execute("INSERT INTO evidence (func, source, kind, likelihoods, detail) VALUES (?,?,?,?,?)",
@@ -145,11 +162,42 @@ class Ledger:
         return post
 
     # ------------------------------------------------------------ experiments
-    def record_experiment(self, kind: str, scenario: str, detail: dict | None = None) -> int:
-        cur = self.con.execute("INSERT INTO experiments (kind, scenario, detail) VALUES (?,?,?)",
-                               (kind, scenario, json.dumps(detail or {})))
+    def atomic(self):
+        """``with ledger.atomic(): ...``: everything written inside lands together
+        or not at all (see ``db.atomic``)."""
+        return db.atomic(self.con)
+
+    def record_experiment(self, kind: str, scenario: str, detail: dict | None = None,
+                          run_key: str | None = None, if_exists: str = "return") -> int:
+        """Store an experiment and return its id.
+
+        ``run_key`` names one step of a durable campaign (e.g. workflow id + step
+        id). It is unique, so a retried step can't count as two experiments.
+        Recording a key that exists returns the existing id (``if_exists="return"``)
+        or raises ``RunKeyExists`` (``"raise"``).
+
+        For a step whose earlier attempt may still be running (a timed-out
+        "zombie"), use ``"raise"`` inside ``ledger.atomic()`` around the whole
+        step: the experiment, its key and its evidence then commit together, and
+        whichever attempt loses the key rolls back having written nothing. On
+        Postgres the loser waits at this insert until the winner commits."""
+        if if_exists not in ("return", "raise"):
+            raise ValueError("if_exists must be 'return' or 'raise'")
+        row = self.con.execute(
+            "INSERT INTO experiments (kind, scenario, detail, run_key) VALUES (?,?,?,?)"
+            " ON CONFLICT (run_key) DO NOTHING RETURNING id",
+            (kind, scenario, json.dumps(detail or {}), run_key)).fetchone()
+        if row is None:                                    # the key was recorded before
+            if if_exists == "raise":
+                raise RunKeyExists(f"run {run_key!r} is already recorded")
+            row = self.con.execute("SELECT id FROM experiments WHERE run_key=?", (run_key,)).fetchone()
         self.con.commit()
-        return int(cur.lastrowid)
+        return int(row["id"])
+
+    def experiment_for_run(self, run_key: str) -> Experiment | None:
+        """The experiment already recorded for this campaign step, if any."""
+        row = self.con.execute("SELECT * FROM experiments WHERE run_key=?", (run_key,)).fetchone()
+        return Experiment.from_row(row) if row else None
 
     # ------------------------------------------------------------ bets
     def place_bet(self, source: str, func: int | None, claim: str, prediction: str,
@@ -163,13 +211,13 @@ class Ledger:
             raise ValueError("prob must be in [0, 1]")
         if spec is not None:
             spec = BetSpec.model_validate(spec).model_dump(exclude_defaults=True)
-        cur = self.con.execute(
+        bet_id = self.con.execute(
             "INSERT INTO bets (source, domain, func, claim, prediction, prob, kind, label, spec, parent_id)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?)",
+            " VALUES (?,?,?,?,?,?,?,?,?,?) RETURNING id",
             (source, domain, func, claim, prediction, prob, kind, label,
-             json.dumps(spec) if spec else None, parent_id))
+             json.dumps(spec) if spec else None, parent_id)).fetchone()["id"]
         self.con.commit()
-        return int(cur.lastrowid)
+        return int(bet_id)
 
     def resolve_bet(self, bet_id: int, outcome: bool, experiment_id: int) -> float:
         """Resolve a bet. Requires an experiment recorded *after* the bet was placed."""
@@ -177,7 +225,7 @@ class Ledger:
         if bet is None:
             raise KeyError(f"no bet {bet_id}")
         if bet["outcome"] is not None:
-            raise ValueError(f"bet {bet_id} already resolved")
+            raise AlreadyResolved(f"bet {bet_id} already resolved")
         exp = self.con.execute("SELECT * FROM experiments WHERE id=?", (experiment_id,)).fetchone()
         if exp is None:
             raise ValueError("bets can only be resolved by a recorded experiment")
@@ -188,10 +236,13 @@ class Ledger:
         if bet["func"] is not None and tested and bet["func"] not in tested:
             raise ValueError(f"experiment {experiment_id} did not test FUNC {bet['func']}")
         brier = (bet["prob"] - (1.0 if outcome else 0.0)) ** 2
-        self.con.execute(
-            "UPDATE bets SET outcome=?, brier=?, experiment_id=?, resolved=CURRENT_TIMESTAMP WHERE id=?",
+        cur = self.con.execute(                            # "AND outcome IS NULL": first resolver wins
+            "UPDATE bets SET outcome=?, brier=?, experiment_id=?, resolved=CURRENT_TIMESTAMP"
+            " WHERE id=? AND outcome IS NULL",
             (int(outcome), brier, experiment_id, bet_id))
         self.con.commit()
+        if cur.rowcount == 0:
+            raise AlreadyResolved(f"bet {bet_id} was resolved by someone else meanwhile")
         return brier
 
     def auto_resolve(self, experiment_id: int, scenario: str, counts: dict[int, int],
@@ -214,7 +265,10 @@ class Ledger:
                 outcome = rate <= spec["max_rate"]
             else:
                 continue
-            brier = self.resolve_bet(bet["id"], outcome, experiment_id)
+            try:
+                brier = self.resolve_bet(bet["id"], outcome, experiment_id)
+            except AlreadyResolved:
+                continue                                   # another agent's experiment got there first
             done.append({"bet": bet["id"], "source": bet["source"], "outcome": outcome, "brier": brier})
         return done
 
@@ -235,7 +289,10 @@ class Ledger:
             if exp is None:
                 continue
             outcome = top == lbl.top(bet["label"])     # settles the top level; finer paths need knockouts
-            brier = self.resolve_bet(bet["id"], outcome, exp)
+            try:
+                brier = self.resolve_bet(bet["id"], outcome, exp)
+            except AlreadyResolved:
+                continue
             done.append({"bet": bet["id"], "source": bet["source"], "label": bet["label"],
                          "settled_as": top, "outcome": outcome, "brier": brier})
         return done
@@ -262,8 +319,10 @@ class Ledger:
 
     # ------------------------------------------------------------ contradictions
     def _check_contradictions(self, func: int, evidence_id: int | None) -> None:
+        db.lock(self.con, "contradiction", func)          # one open contradiction per claim, even with agents racing
         dist, n = self.experimental_belief(func)
         if n == 0:
+            self.con.commit()
             return
         for bet in self.con.execute(
                 "SELECT * FROM bets WHERE func=? AND outcome IS NULL AND kind='claim' AND prob>=?",
@@ -343,7 +402,9 @@ class Ledger:
         if open_c:
             raise ValueError(f"FUNC {func} has an open contradiction; resolve it before naming")
         ev = [r["id"] for r in self.con.execute("SELECT id FROM evidence WHERE func=?", (func,))]
-        self.con.execute("INSERT OR REPLACE INTO names (func, name, prob, provenance) VALUES (?,?,?,?)",
+        self.con.execute("INSERT INTO names (func, name, prob, provenance) VALUES (?,?,?,?)"
+                         " ON CONFLICT (func) DO UPDATE SET name=excluded.name, prob=excluded.prob,"
+                         " provenance=excluded.provenance, written=CURRENT_TIMESTAMP",
                          (func, name, prob, json.dumps({"evidence": ev})))
         self.con.commit()
 

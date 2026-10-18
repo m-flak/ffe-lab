@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from ffelab import db as dbmod, exe, export
+from store import fresh_db
 from ffelab.ledger import Ledger
 
 
@@ -54,7 +55,7 @@ class TestExeCheck(unittest.TestCase):
         self.assertEqual(rows[10]["method"], "interpolated")   # funcs 1, 10, 19... have no frame
 
     def test_run_stores_identity_map(self):
-        con = dbmod.connect(":memory:")
+        con = fresh_db()
         funcs = framed_funcs()
         con.executemany("INSERT INTO functions (num, pos, has_frame) VALUES (?,?,?)",
                         [(n, p, int(f)) for n, p, f in funcs])
@@ -77,7 +78,7 @@ FUNC_000003:\t\t; Pos = 11020
 
 class TestExport(unittest.TestCase):
     def setUp(self):
-        self.con = dbmod.connect(":memory:")
+        self.con = fresh_db()
         self.con.executemany("INSERT INTO functions (num, pos, name) VALUES (?,?,?)",
                              [(1, 0x11000, None), (2, 0x11010, "SysMenuInit"), (3, 0x11020, None)])
         self.L = Ledger(self.con)
