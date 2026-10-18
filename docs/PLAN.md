@@ -1,6 +1,8 @@
 # Plan
 
-Status as of v0.4. Ordered by when things should happen.
+Status as of v0.5: the AI-engineering stack (items 1–4 below) and the call-graph
+structure are built. The next real step is emulator bring-up. Ordered by when
+things should happen.
 
 ---
 
@@ -13,10 +15,15 @@ Status as of v0.4. Ordered by when things should happen.
 | v0.3 | Cold start: fingerprints, one-tag contrasts, behaviour groups, callee propagation, knockouts with noise-masked diffs, open label paths |
 | v0.4 | `exe-check` + content-based address mapping between builds; `export` of confirmed names into the asm as alias labels |
 | v0.5 | Pydantic models for every record (`models.py`); eval harness (`ffelab eval`) for the blind labeller and red team; `ffelab eval gate` against `evals/baselines/` for prompt changes (run locally; no CI) |
+| v0.5 | Agent SDK orchestrator (`ffelab agents`) with budgets, a question queue and OpenTelemetry tracing (Phoenix) |
+| v0.5 | Postgres + pgvector beside SQLite (`FFELAB_DB`, `ffelab db copy`), strict run keys, `ffelab embed` / `similar` |
+| v0.5 | Durable experiment campaigns on Temporal (`python -m ffelab.workflows`) |
+| v0.5 | Call-graph structure (`ffelab graph`): spectral basis, call layers, label quotient |
+| v0.5 | Docker Compose for the optional servers (`docs/DOCKER.md`); day-to-day guide (`docs/USAGE.md`) |
 
 ---
 
-## Next: the AI-engineering stack (start once the claude.ai Project exists)
+## The AI-engineering stack (built in v0.5; what's left is listed per item)
 
 Chosen deliberately: each is a skill AI-engineering roles ask for, and each
 solves a real problem in ffelab. Keep SQLite as a zero-setup "lite mode".
@@ -42,7 +49,7 @@ solves a real problem in ffelab. Keep SQLite as a zero-setup "lite mode".
   stop conditions, a batched question queue for the human.
 - Tracing for every agent step, tool call, token count and cost
   (OpenTelemetry + Langfuse or Arize Phoenix).
-- **Built** (`ffelab agents run`, `docs/ORCHESTRATOR.md`, D14, D15). Next: a first
+- **Status: built** (`ffelab agents run`, `docs/ORCHESTRATOR.md`, D14, D15). Next: a first
   live run on the emulator; give the red team `run_halt`/knockouts as orchestrator
   actions; wrap `run_round` as a durable activity (step 4).
 

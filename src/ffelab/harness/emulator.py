@@ -10,8 +10,8 @@ Two supported setups:
   via ``screencapture``, save states via DOSBox-X's own hotkeys (set in
   config), debugging via a GDB stub if your build has one.
 
-UNTESTED against a live emulator in this repo's CI: the protocol pieces are
-unit-tested against a fake stub; expect to adjust key maps and timings once.
+UNTESTED against a live emulator so far: the protocol pieces are unit-tested
+against a fake stub; expect to adjust key maps and timings once.
 """
 from __future__ import annotations
 
