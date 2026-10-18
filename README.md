@@ -26,11 +26,11 @@ segment.py   tables, propagate   loop, knockout, harness       ledger, adversary
 ```bash
 git clone https://github.com/corpsofengineers/ffed3d ../ffed3d   # the asm source
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[agent,evals,dev]"
+pip install -e ".[agent,evals,orchestrator,dev]"
 
 ffelab build --src ../ffed3d               # → ffe.db, data/module_map.json, docs/MODULE_MAP.md
 ffelab exe-check path/to/FIRSTENC.EXE      # is your game exe the build the asm describes?
-python -m pytest                            # 99 tests
+python -m pytest                            # 118 tests
 FFED3D_DIR=../ffed3d python -m pytest       # also runs the real-data test
 ```
 
@@ -46,6 +46,9 @@ FFED3D_DIR=../ffed3d python -m pytest       # also runs the real-data test
 | `ffelab graph build / vote / outliers / check` | Call-graph structure: call layers, a spectral basis searchable with `ffelab similar --model callgraph-spectral-v1`, and static label votes from neighbours and the label quotient (see `docs/GRAPH.md`) |
 | `ffelab db copy --from ffe.db --to postgresql:///ffelab` | Move the whole store to Postgres (or back to a file) |
 | `ffelab eval run / gate / compare / export` | Score the blind labeller and red team against experiment-confirmed labels; gate prompt changes on it (see `docs/EVALS.md`) |
+| `ffelab agents run [--worker claude\|heuristic] [--trace phoenix]` | Run the orchestrator: blind labeller and red team workers under a budget, every step traced (see `docs/ORCHESTRATOR.md`) |
+| `ffelab agents questions / answer / dismiss` | The batched questions the agents and open contradictions have queued for you |
+| `python -m ffelab.mcp_server` | The MCP server agents use (31 tools) |
 | `python -m ffelab.mcp_server` | The MCP server agents use (34 tools) |
 
 ## Modules
@@ -69,6 +72,7 @@ FFED3D_DIR=../ffed3d python -m pytest       # also runs the real-data test
 | `export.py` | Confirmed names → alias labels in a copy of the asm |
 | `harness/` | `GameBackend` interface, `FakeBackend`, `EmulatorBackend` (QEMU / DOSBox-X), GDB client |
 | `mcp_server.py` | The agent tool surface |
+| `orchestrator/` | The agent loop as a program: Agent SDK workers, budgets and stop conditions, question queue, OpenTelemetry tracing |
 | `evals/` | Eval harness: cases from settled labels, Claude / heuristic / replay solvers, metrics, gate |
 
 Agents: `.claude/agents/red-team.md` and `.claude/agents/blind-labeller.md`
@@ -124,7 +128,7 @@ to a JSON `EmulatorConfig`, e.g. `{"binary": "<id from exe-check>", "code_base":
 ## Status
 
 - Working: static map, ledger, adversarial layer, fingerprints, propagation,
-  knockouts, exe-check, export, Pydantic models, eval harness with a gate, Postgres + pgvector beside SQLite, call-graph structure. 99 tests (all also pass on Postgres), unit-tested against fakes plus one
+  knockouts, exe-check, export, Pydantic models, eval harness with a gate, Postgres + pgvector beside SQLite, call-graph structure, Agent SDK orchestrator with tracing. 118 tests (all also pass on Postgres), unit-tested against fakes plus one
   real-data test.
 - **Not yet run against a live emulator.** Expect one session of tuning key maps,
   timings and the code base address.
