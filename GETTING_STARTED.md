@@ -163,6 +163,10 @@ ffelab db copy --from ffe.db --to postgresql:///ffelab   # copies everything, id
 export FFELAB_DB=postgresql:///ffelab          # every ffelab command now uses Postgres
 ffelab embed                                   # vectors for similarity search
 ffelab similar 688                             # functions whose code looks like FUNC 688's
+ffelab graph build                             # call layers + call-graph basis (also works on SQLite)
+ffelab similar 688 --model callgraph-spectral-v1   # functions near 688 in the call graph
+ffelab graph check                             # how well the graph votes predict known labels
+ffelab graph vote                              # write them as static evidence (never settles anything)
 ```
 
 Put the same URL in `.mcp.json` as `"FFELAB_DB": "postgresql:///ffelab"`.
@@ -175,6 +179,10 @@ similar functions get similar lists; *similarity* is the cosine between two
 of them (1 = same, 0 = unrelated). ffelab's embeddings come from the code's
 instruction patterns with names stripped, and from which scenarios a function
 fires in. They point you at candidates; only experiments settle anything.
+The call-graph basis places functions by who calls whom; the *quotient* is the
+small label-to-label call graph you get by collapsing each labelled function to
+its label, which rules out most labels for a function from its labelled
+neighbours. Findings and numbers: `docs/GRAPH.md`.
 
 ---
 
@@ -192,6 +200,8 @@ No emulator needed. You read code and make calls; the AI assists.
 | Look at a function | "Show me the blind view of FUNC 688 and explain what the code does." |
 | Record what you know | "Record a call: 688 is ai/traffic/spawning, 85% confidence, source human." |
 | Spread knowledge | "Run label propagation and tell me which functions moved most." |
+| Use the call graph | "Run graph_votes, then list unnamed functions whose belief moved most and why." |
+| Find suspect labels | "Show quotient_outliers and have the red team look at the confident claims there." |
 | Get a second opinion | "Use the blind-labeller agent on the first ten functions of segment 12." |
 | Find disagreements | "Reveal the blind labels for those and list disagreements with my calls." |
 | See what's most uncertain | "Which functions are most uncertain right now?" |
@@ -401,7 +411,7 @@ and later will live in Postgres.
 | `ModuleNotFoundError: mcp` | `pip install -e ".[agent]"` |
 | "Postgres support needs psycopg" | `pip install -e ".[pg]"` |
 | `connection refused` on a `postgresql://` URL | `brew services start postgresql@17` |
-| `similar` says "has no ... embedding" | Run `ffelab embed` (again after new functions or logging passes) |
+| `similar` says "has no ... embedding" | Run `ffelab embed` (again after new functions or logging passes); for `callgraph-spectral-v1`, `ffelab graph build` |
 | Tests fail on `TestRealData` | Set `FFED3D_DIR` to the ffed3d folder, or ignore (it's optional) |
 | "bets can only be resolved by a recorded experiment" | Working as intended: run the experiment first |
 | "has an open contradiction; resolve it before naming" | `show open contradictions`, then close it |
