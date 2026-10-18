@@ -53,9 +53,10 @@ solves a real problem in ffelab. Keep SQLite as a zero-setup "lite mode".
   `ffelab embed` / `ffelab similar` and the `similar_functions` tool do the
   retrieval (pgvector HNSW index on Postgres, NumPy scan on SQLite). Concurrent
   belief updates are locked per function; experiments take an optional unique
-  `run_key` for item 4. Remaining: measure with the eval harness whether giving
-  the blind labeller `similar_functions` improves its accuracy before adding the
-  tool to its agent file.
+  `run_key` for item 4. The blind labeller and red team have `similar_functions`
+  in their agent files (added with D16, at Matthew's request, before measuring).
+  Remaining: once experiments settle enough labels, `ffelab eval compare` the
+  agents with and without it, and drop it if it doesn't help.
 - **Call-graph structure: built** (D16, `docs/GRAPH.md`). `ffelab graph` adds a
   spectral basis (`callgraph-spectral-v1`, searchable like the other embeddings),
   call layers, and two static evidence kinds (neighbour vote, quotient check).
