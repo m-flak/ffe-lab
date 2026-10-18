@@ -7,7 +7,9 @@ Two kinds, the same two agents the evals measure (``.claude/agents/``):
   with which rival label, in which registered scenario.
 
 A worker *decides*; the orchestrator *acts*. Workers get read-only tools
-(``blind_view``, ``list_scenarios``) plus ``ask_human``, and answer with a
+(``blind_view``, ``list_scenarios``, and once their modules are installed
+``similar_functions`` and, for the red team only, ``quotient_outliers``) plus
+``ask_human``, and answer with a
 Pydantic model as structured output (JSON the API constrains to the model's
 schema). Writing to the ledger, placing bets and running experiments stay in
 ordinary code, so the ledger rules (bets placed before the run, only
@@ -21,6 +23,7 @@ and tests.
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import time
 from pathlib import Path
@@ -111,14 +114,14 @@ OUTPUT = {"blind-labeller": BlindLabelVerdict, "red-team": RedTeamPlan}
 # ---------------------------------------------------------------- prompts
 ORCHESTRATOR_NOTE = {
     "blind-labeller": (
-        "You are running as a worker under the ffelab orchestrator. Your tools are blind_view and "
-        "ask_human. Do not call record_blind_label: return your answer in the required output "
+        "You are running as a worker under the ffelab orchestrator. Your tools are {tools}. "
+        "Do not call record_blind_label: return your answer in the required output "
         "format and the orchestrator records it for you. If something can only be settled by a "
         "person, call ask_human; the question is queued for them, and you still give your best "
         "answer now."),
     "red-team": (
         "You are running as a worker under the ffelab orchestrator, and this round you only decide; "
-        "you do not run anything. Your tools are blind_view, list_scenarios and ask_human; the "
+        "you do not run anything. Your tools are {tools}; the "
         "target claim and the registered scenarios are in the user message. Do not call "
         "red_team_targets, place_attack or run_logging_pass. If you attack, give the rival label, "
         "a scenario from the registered list, what the rival predicts there (hit or miss), and your "
@@ -126,10 +129,25 @@ ORCHESTRATOR_NOTE = {
         "running the scenario, and the run resolves it. If no registered scenario separates claim "
         "from rival, don't attack; you may ask_human for the save state you would need."),
 }
+GRAPH_NOTE = (
+    " similar_functions returns function numbers and cosine scores only (model asm-ngram-v1: "
+    "instruction patterns; callgraph-spectral-v1: position in the call graph); open a match with "
+    "blind_view. A similar function is a hint for where to look, never evidence. blind_view's "
+    "call_layers (height: longest call chain below, depth: above, cycle_size: size of the call "
+    "cycle it is in) is structure only.")
+OUTLIER_NOTE = (
+    " quotient_outliers lists calls between two labelled functions that no other labelled call "
+    "supports: each is a mislabel or a real cross-layer call, a lead for an attack, not a verdict.")
 
 
 def system_prompt(kind: WorkerKind, prompt_path: str | Path | None = None) -> str:
-    return load_agent_prompt(kind, prompt_path) + "\n\n" + ORCHESTRATOR_NOTE[kind]
+    names = tool_names(kind)
+    note = ORCHESTRATOR_NOTE[kind].replace("{tools}", ", ".join(names))
+    if "similar_functions" in names:
+        note += GRAPH_NOTE
+    if "quotient_outliers" in names:
+        note += OUTLIER_NOTE
+    return load_agent_prompt(kind, prompt_path) + "\n\n" + note
 
 
 def user_message(task: Task) -> str:
@@ -141,8 +159,23 @@ def user_message(task: Task) -> str:
 
 
 # ---------------------------------------------------------------- tools (read-only + ask_human)
-TOOLS = {"blind-labeller": ("blind_view", "ask_human"),
-         "red-team": ("blind_view", "list_scenarios", "ask_human")}
+TOOLS = {"blind-labeller": ("blind_view", "similar_functions", "ask_human"),
+         "red-team": ("blind_view", "list_scenarios", "similar_functions", "quotient_outliers", "ask_human")}
+# Tools backed by modules that arrive with other plan items (embed.py with Postgres/pgvector,
+# graph.py with the call-graph work). Each registers only when its module is installed.
+# graph_votes is never a worker tool: it writes evidence, and workers are read-only.
+NEEDS = {"similar_functions": "ffelab.embed", "quotient_outliers": "ffelab.graph"}
+
+
+def _have(module: str) -> bool:
+    try:
+        return importlib.util.find_spec(module) is not None
+    except ModuleNotFoundError:
+        return False
+
+
+def tool_names(kind: WorkerKind) -> list[str]:
+    return [t for t in TOOLS[kind] if t not in NEEDS or _have(NEEDS[t])]
 
 
 def build_tools(ledger: Ledger, kind: WorkerKind, result: WorkerResult, parent=None) -> list:
@@ -176,6 +209,18 @@ def build_tools(ledger: Ledger, kind: WorkerKind, result: WorkerResult, parent=N
         result.questions.append(d)
         return "queued for the human; carry on with your best answer"
 
+    def similar_functions(a):
+        from .. import embed
+        model = a.get("model") or embed.DEFAULT_MODEL
+        return embed.similar(ledger.con, int(a["func"]), model, int(a.get("k", 10)))
+
+    def quotient_outliers(a):
+        from .. import graph
+        out = graph.outliers(ledger)
+        if a.get("func") is not None:
+            out = [o for o in out if int(a["func"]) in (o["caller"], o["callee"])]
+        return out
+
     defs = {
         "blind_view": ("A function's code and structure with no beliefs, claims or inherited names.",
                        {"type": "object", "properties": {"func": {"type": "integer"}}, "required": ["func"]},
@@ -187,8 +232,20 @@ def build_tools(ledger: Ledger, kind: WorkerKind, result: WorkerResult, parent=N
                       {"type": "object", "properties": {"question": {"type": "string"},
                                                         "func": {"type": "integer"}},
                        "required": ["question"]}, ask_human),
+        "similar_functions": (
+            "Functions most like func: by instruction patterns (model asm-ngram-v1) or by position in "
+            "the call graph (callgraph-spectral-v1). Numbers and cosine scores only, no names, labels "
+            "or beliefs. A hint for where to look, never evidence.",
+            {"type": "object", "properties": {
+                "func": {"type": "integer"}, "k": {"type": "integer", "minimum": 1, "maximum": 50},
+                "model": {"type": "string", "enum": ["asm-ngram-v1", "callgraph-spectral-v1"]}},
+             "required": ["func"]}, similar_functions),
+        "quotient_outliers": (
+            "Calls between two labelled functions that no other labelled call supports (a mislabel or a "
+            "real cross-layer call). Optionally only those involving func. Leads, not verdicts.",
+            {"type": "object", "properties": {"func": {"type": "integer"}}}, quotient_outliers),
     }
-    return [tool(n, defs[n][0], defs[n][1])(traced(n, defs[n][2])) for n in TOOLS[kind]]
+    return [tool(n, defs[n][0], defs[n][1])(traced(n, defs[n][2])) for n in tool_names(kind)]
 
 
 # ---------------------------------------------------------------- Claude (Agent SDK)
@@ -211,7 +268,7 @@ class ClaudeWorker:
             system_prompt=self.prompts[kind],
             mcp_servers={"ffelab": server},
             tools=[],                                             # no built-in Bash/Read/Edit/...
-            allowed_tools=[f"mcp__ffelab__{t}" for t in TOOLS[kind]],
+            allowed_tools=[f"mcp__ffelab__{t}" for t in tool_names(kind)],
             permission_mode="dontAsk",                            # anything not allowed is denied
             setting_sources=[],                                   # ignore ~/.claude and project settings
             model=self.model, effort=self.effort,

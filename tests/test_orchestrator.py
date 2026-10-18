@@ -228,7 +228,8 @@ class TestHeuristicWorker(unittest.TestCase):
 
 @unittest.skipIf(sdk is None, "claude-agent-sdk not installed")
 class TestTools(unittest.TestCase):
-    def test_tools_are_read_only_and_blind(self):
+    @mock.patch("ffelab.orchestrator.workers._have", return_value=False)
+    def test_tools_are_read_only_and_blind(self, _):
         L = setup()
         L.call(1, "render", 0.9, source="human")
         res = WorkerResult(worker="w", kind="red-team", task="t")
@@ -246,6 +247,69 @@ class TestTools(unittest.TestCase):
         asyncio.run(tools["ask_human"].handler({"question": "is the combat save broken?", "func": 1}))
         self.assertEqual(res.questions[0].func, 1)
         self.assertEqual(res.tool_calls, ["blind_view", "blind_view", "list_scenarios", "ask_human"])
+
+
+@unittest.skipIf(sdk is None, "claude-agent-sdk not installed")
+class TestGraphTools(unittest.TestCase):
+    """similar_functions / quotient_outliers register only when embed.py / graph.py are installed."""
+
+    def fake_modules(self):
+        import types
+        embed = types.ModuleType("ffelab.embed")
+        embed.DEFAULT_MODEL = "asm-ngram-v1"
+        embed.calls = []
+
+        def similar(con, func, model="asm-ngram-v1", k=10):
+            embed.calls.append((func, model, k))
+            if func == 999:
+                raise KeyError("FUNC 999 has no embedding")
+            return [{"func": 3, "score": 0.91}]
+        embed.similar = similar
+        graph = types.ModuleType("ffelab.graph")
+        graph.outliers = lambda ledger: [{"caller": 1, "caller_label": "ui", "callee": 2, "callee_label": "math"},
+                                         {"caller": 4, "caller_label": "io", "callee": 5, "callee_label": "ai"}]
+        return {"ffelab.embed": embed, "ffelab.graph": graph}
+
+    def test_without_the_modules(self):
+        with mock.patch("ffelab.orchestrator.workers._have", return_value=False):
+            from ffelab.orchestrator.workers import system_prompt, tool_names
+            self.assertEqual(tool_names("blind-labeller"), ["blind_view", "ask_human"])
+            self.assertEqual(tool_names("red-team"), ["blind_view", "list_scenarios", "ask_human"])
+            self.assertNotIn("similar_functions", system_prompt("blind-labeller"))
+
+    def test_with_the_modules(self):
+        L = setup()
+        mods = self.fake_modules()
+        with mock.patch.dict("sys.modules", mods), \
+                mock.patch("ffelab.orchestrator.workers._have", return_value=True):
+            from ffelab.orchestrator.workers import system_prompt, tool_names
+            blind = tool_names("blind-labeller")
+            red = tool_names("red-team")
+            self.assertEqual(set(blind), {"blind_view", "similar_functions", "ask_human"})
+            self.assertEqual(set(red), {"blind_view", "list_scenarios", "similar_functions",
+                                        "quotient_outliers", "ask_human"})
+            self.assertNotIn("graph_votes", blind + red)                  # writes evidence: never a worker tool
+            self.assertIn("call_layers", system_prompt("blind-labeller"))
+            self.assertNotIn("quotient_outliers", system_prompt("blind-labeller"))
+            self.assertIn("quotient_outliers", system_prompt("red-team"))
+
+            res = WorkerResult(worker="w", kind="red-team", task="t")
+            tools = {t.name: t for t in build_tools(L, "red-team", res)}
+            out = asyncio.run(tools["similar_functions"].handler({"func": 2, "model": "callgraph-spectral-v1", "k": 3}))
+            self.assertEqual(json.loads(out["content"][0]["text"]), [{"func": 3, "score": 0.91}])
+            self.assertEqual(mods["ffelab.embed"].calls[-1], (2, "callgraph-spectral-v1", 3))
+            asyncio.run(tools["similar_functions"].handler({"func": 2}))
+            self.assertEqual(mods["ffelab.embed"].calls[-1], (2, "asm-ngram-v1", 10))
+            self.assertTrue(asyncio.run(tools["similar_functions"].handler({"func": 999}))["is_error"])
+            only = json.loads(asyncio.run(tools["quotient_outliers"].handler({"func": 5}))["content"][0]["text"])
+            self.assertEqual([o["caller"] for o in only], [4])
+            everything = json.loads(asyncio.run(tools["quotient_outliers"].handler({}))["content"][0]["text"])
+            self.assertEqual(len(everything), 2)
+
+            blind_tools = {t.name for t in build_tools(L, "blind-labeller", res)}
+            self.assertEqual(blind_tools, {"blind_view", "similar_functions", "ask_human"})
+            opts = ClaudeWorker(L, query_fn=lambda **k: None).options("blind-labeller", res, 5, None, None)
+            self.assertEqual(set(opts.allowed_tools), {f"mcp__ffelab__{t}" for t in blind_tools})
 
 
 def fake_query(script, captured):
@@ -286,7 +350,8 @@ class TestClaudeWorker(unittest.TestCase):
             res = asyncio.run(w.run(task or BlindTask(func=2), 7, 0.25))
         return res, captured
 
-    def test_success(self):
+    @mock.patch("ffelab.orchestrator.workers._have", return_value=False)
+    def test_success(self, _):
         async def call_tool(c):
             await c["tools"]["blind_view"].handler({"func": 2})
         script = [assistant("m1", [sdk.ToolUseBlock(id="t1", name="mcp__ffelab__blind_view", input={"func": 2})],

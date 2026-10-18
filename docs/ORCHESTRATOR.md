@@ -35,6 +35,20 @@ budget and the ledger rules, and records every step as a trace. The LLM agents
    resolves the prediction and settles claims that became decisive.
 5. Questions the workers asked through `ask_human` are queued.
 
+## Worker tools
+
+| tool | blind labeller | red team | needs |
+|---|---|---|---|
+| `blind_view` (code, structure, `call_layers` once graph.py is in) | yes | yes | |
+| `similar_functions` (numbers and cosine scores only; `asm-ngram-v1` or `callgraph-spectral-v1`) | yes | yes | `embed.py` |
+| `list_scenarios` | | yes | |
+| `quotient_outliers` (calls between labels nothing else supports) | | yes | `graph.py` |
+| `ask_human` | yes | yes | |
+
+A tool whose module isn't installed yet (it comes with another plan item) is
+left out, and the prompt note lists only the tools the worker has. `graph_votes`
+is never a worker tool because it writes evidence.
+
 Workers decide; the orchestrator acts. Workers' tools are read-only, so no agent
 can place a bet after seeing a result, resolve a bet by hand or write a label
 without validation. The agent prompts are the same `.claude/agents/*.md` files
@@ -119,7 +133,7 @@ ffelab agents run --backend qemu --max-usd 2 --trace phoenix --out reports/run1.
 
 Claude workers authenticate the way Claude Code does: `ANTHROPIC_API_KEY`, or a
 logged-in Claude Code. The workers ignore your `~/.claude` settings, CLAUDE.md
-files and other tools: each sees only its own three tools.
+files and other tools: each sees only its own tools (table above).
 
 The default model is `claude-opus-5-5` (`--model`, `--effort` to change it). One
 blind label with Opus 5.5 at low effort cost about $0.025 in a test run (3
