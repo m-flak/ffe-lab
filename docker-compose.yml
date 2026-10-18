@@ -1,0 +1,72 @@
+# Backing services for ffelab, so nothing has to be installed natively.
+# ffelab itself, Claude Code and the emulator stay on the Mac (see docs/DOCKER.md).
+#
+#   cp .env.example .env          # once; pick profiles and ports there
+#   docker compose up -d          # starts the profiles named in COMPOSE_PROFILES
+#   docker compose --profile pg up -d    # or name them on the command line
+#
+# Profiles: pg (Postgres 17 + pgvector), temporal (campaign server), tracing (Phoenix).
+# SQLite lite mode needs none of them.
+
+name: ffelab
+
+services:
+  postgres:
+    profiles: [pg]
+    image: pgvector/pgvector:0.8.7-pg17
+    environment:
+      POSTGRES_USER: ffelab
+      POSTGRES_PASSWORD: ffelab
+      POSTGRES_DB: ffelab
+    ports:
+      - "127.0.0.1:${FFELAB_PG_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/10-ffelab.sql:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "ffelab", "-d", "ffelab"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  temporal:
+    profiles: [temporal]
+    image: temporalio/temporal:1.9.1
+    # The CLI's dev server: one process, history kept in a SQLite file on the volume.
+    command: ["server", "start-dev", "--ip", "0.0.0.0",
+              "--db-filename", "/data/campaigns.db"]
+    user: "0"                            # so it can write the named volume
+    ports:
+      - "127.0.0.1:${FFELAB_TEMPORAL_PORT:-7233}:7233"     # gRPC: workers and clients
+      - "127.0.0.1:${FFELAB_TEMPORAL_UI_PORT:-8233}:8233"  # web UI
+    volumes:
+      - temporal:/data
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "127.0.0.1:7233"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  phoenix:
+    profiles: [tracing]
+    image: arizephoenix/phoenix:version-20.23.0
+    environment:
+      PHOENIX_WORKING_DIR: /mnt/data
+    ports:
+      - "127.0.0.1:${FFELAB_PHOENIX_PORT:-6006}:6006"   # web UI + OTLP over HTTP (/v1/traces)
+    volumes:
+      - phoenix:/mnt/data
+    healthcheck:
+      test: ["CMD", "/usr/bin/python3.13", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:6006/healthz')"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  temporal:
+  phoenix:
