@@ -35,7 +35,7 @@ PRIOR_RELIABILITY = {"human": 0.9, "ai": 0.6, "adversary": 0.6, "static": 0.6, "
 PRIOR_WEIGHT = 3.0
 FLOOR = 1e-4
 OPINION_KINDS = {"call"}                 # evidence kinds that are opinions, not experiments
-STATIC_KINDS = {"static_callee"}         # derived from code structure / inherited names, not runs
+STATIC_KINDS = {"static_callee", "static_graph_knn", "static_quotient"}  # from code structure / inherited names, not runs
 CONTRADICTION_RATIO = 0.25               # claimed label vs best rival, experiment evidence only
 CONTRADICTION_MIN_CONF = 0.7
 
