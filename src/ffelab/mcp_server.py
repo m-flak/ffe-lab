@@ -176,8 +176,9 @@ def blind_view(func: int) -> dict:
 
 @mcp.tool()
 def similar_functions(func: int, k: int = 10, model: str = "asm-ngram-v1") -> list:
-    """Functions most like ``func``: by instruction patterns (model asm-ngram-v1) or by
-    the scenarios they fire in (fp-scenario-v1). Numbers and cosine scores only, no
+    """Functions most like ``func``: by instruction patterns (model asm-ngram-v1), by
+    position in the call graph (callgraph-spectral-v1: functions that call each other or
+    share partners) or by the scenarios they fire in (fp-scenario-v1). Numbers and cosine scores only, no
     names, labels or beliefs; open a match with blind_view. Similarity is a hint
     for where to look, never evidence."""
     from . import embed
@@ -243,8 +244,9 @@ def fingerprint(func: int) -> dict:
 
 
 @mcp.tool()
-def similar_functions(func: int, k: int = 10) -> list:
-    """Functions whose behavioural profile matches this one's."""
+def similar_behaviour(func: int, k: int = 10) -> list:
+    """Functions whose behavioural profile matches this one's. (Renamed from a second
+    `similar_functions`, which clashed with the embedding search tool of that name.)"""
     return behavior.similar(_ledger, func, k)
 
 
@@ -252,6 +254,24 @@ def similar_functions(func: int, k: int = 10) -> list:
 def behaviour_groups(threshold: float = 0.85) -> dict:
     """Clusters of functions that behave alike: subsystems discovered before they're named."""
     return behavior.behaviour_groups(_ledger, threshold)
+
+
+@mcp.tool()
+def graph_votes(k: int = 10) -> dict:
+    """Re-derive static label evidence from call-graph structure: the labels of each
+    function's nearest neighbours in the call-graph basis, and which labels its labelled
+    callers and callees allow (the quotient). Idempotent; never settles claims.
+    Run `ffelab graph build` first."""
+    from . import graph
+    return graph.vote_all(_ledger, k)
+
+
+@mcp.tool()
+def quotient_outliers() -> list:
+    """Calls between two labels that no other labelled call supports: each one is a
+    mislabel or a real cross-layer call. Candidates for review, not verdicts."""
+    from . import graph
+    return graph.outliers(_ledger)
 
 
 @mcp.tool()

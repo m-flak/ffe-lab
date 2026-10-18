@@ -12,8 +12,13 @@
       write confirmed names into a copy of ffe.asm as alias labels, plus a diff
   ffelab embed [--db ffe.db] [--model asm-ngram-v1|fp-scenario-v1|all]
       compute embeddings for similarity search
-  ffelab similar FUNC [--db ffe.db] [--model asm-ngram-v1] [-k 10]
+  ffelab similar FUNC [--db ffe.db] [--model asm-ngram-v1|callgraph-spectral-v1] [-k 10]
       functions most like FUNC (numbers and scores only; no names or beliefs)
+  ffelab graph build|vote|outliers|check [--db ffe.db]
+      call-graph structure (docs/GRAPH.md): build = call layers + spectral basis
+      (embedding callgraph-spectral-v1); vote = neighbour and quotient label evidence
+      (static, never settles anything); outliers = calls between labels nothing else
+      supports; check = hold-out accuracy of the votes
   ffelab db copy --from ffe.db --to postgresql:///ffelab
       copy a whole store into an empty one (SQLite -> Postgres, or back)
   ffelab eval export --db ffe.db [--out evals/datasets]
@@ -134,6 +139,8 @@ def main(argv=None):
     em.add_argument("--model", default="all")
     sm = sub.add_parser("similar"); sm.add_argument("func", type=int); sm.add_argument("--db", default=DEFAULT_DB)
     sm.add_argument("--model", default="asm-ngram-v1"); sm.add_argument("-k", type=int, default=10)
+    gr = sub.add_parser("graph"); gr.add_argument("graph_cmd", choices=["build", "vote", "outliers", "check"])
+    gr.add_argument("--db", default=DEFAULT_DB); gr.add_argument("-k", type=int, default=10)
     dbc = sub.add_parser("db").add_subparsers(dest="db_cmd", required=True)
     cp = dbc.add_parser("copy"); cp.add_argument("--from", dest="src", required=True)
     cp.add_argument("--to", dest="dst", required=True)
@@ -178,6 +185,18 @@ def main(argv=None):
         from . import embed
         for r in embed.similar(dbmod.connect(a.db), a.func, a.model, a.k):
             print(f"FUNC_{r['func']:06d}  {r['score']:.3f}")
+    elif a.cmd == "graph":
+        from . import graph
+        con = dbmod.connect(a.db)
+        if a.graph_cmd == "build":
+            r = graph.build(con)
+        elif a.graph_cmd == "vote":
+            r = graph.vote_all(Ledger(con), a.k)
+        elif a.graph_cmd == "outliers":
+            r = graph.outliers(Ledger(con))
+        else:
+            r = graph.check(Ledger(con), a.k)
+        print(json.dumps(r, indent=2))
     elif a.cmd == "db":
         counts = dbmod.copy(dbmod.connect(a.src), dbmod.connect(a.dst))
         print(json.dumps(counts, indent=2))

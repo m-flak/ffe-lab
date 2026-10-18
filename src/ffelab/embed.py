@@ -12,6 +12,10 @@ Two built-in embedders, both deterministic, local and free (no API key):
   one of 256 slots (the "hashing trick"). Two functions sharing many instruction
   patterns get similar vectors. Normalisation drops inherited names, so a
   match never leaks a hacker's name (or any belief) to the blind labeller.
+* ``callgraph-spectral-v1`` (kind ``graph``): the function's coordinates in the
+  call graph's spectral basis (``graph.py``). Functions that call each other,
+  directly or through shared partners, point the same way. Built by
+  ``ffelab graph build``; uses call edges only, no names or addresses.
 * ``fp-scenario-v1`` (kind ``fingerprint``): the function's hit rate in each
   tagged scenario (``behavior.py`` fingerprints), hashed into 64 slots.
   Functions that fire in the same situations point the same way. Rebuild after
@@ -95,14 +99,21 @@ def fingerprint_vector(con, func: int, dim: int = 64) -> np.ndarray | None:
 class Embedder:
     kind: str
     dim: int
-    fn: Callable[..., np.ndarray | None]
-    funcs_sql: str
+    fn: Callable[..., np.ndarray | None] | None
+    funcs_sql: str = ""
+    batch: Callable[..., dict[int, np.ndarray]] | None = None   # for models that need the whole store at once
+
+
+def _graph_vectors(con, dim: int) -> dict[int, np.ndarray]:
+    from . import graph
+    return graph.spectral_vectors(con, dim)
 
 
 MODELS: dict[str, Embedder] = {
     "asm-ngram-v1": Embedder("asm", 256, asm_vector, "SELECT num AS f FROM functions ORDER BY num"),
     "fp-scenario-v1": Embedder("fingerprint", 64, fingerprint_vector,
                                "SELECT DISTINCT func AS f FROM fingerprints ORDER BY f"),
+    "callgraph-spectral-v1": Embedder("graph", 32, None, batch=_graph_vectors),
 }
 DEFAULT_MODEL = "asm-ngram-v1"
 
@@ -137,13 +148,21 @@ def _model(name: str) -> Embedder:
 def build(con, model: str = DEFAULT_MODEL, funcs: list[int] | None = None) -> int:
     """(Re)compute embeddings for ``funcs`` (default: every function the model covers)."""
     emb = _model(model)
-    funcs = funcs if funcs is not None else [r["f"] for r in con.execute(emb.funcs_sql)]
     vec_param = "?::vector" if has_pgvector(con) else "?"
     rows = []
-    for f in funcs:
-        v = emb.fn(con, f, emb.dim)
-        if v is not None:
-            rows.append((f, model, emb.kind, emb.dim, _encode(con, v)))
+    if emb.batch:
+        vecs = emb.batch(con, emb.dim)
+        if funcs is None:                              # a full rebuild drops functions that lost every call
+            con.execute("DELETE FROM embeddings WHERE model=?", (model,))
+        for f in (sorted(vecs) if funcs is None else funcs):
+            if f in vecs:
+                rows.append((f, model, emb.kind, emb.dim, _encode(con, vecs[f])))
+    else:
+        funcs = funcs if funcs is not None else [r["f"] for r in con.execute(emb.funcs_sql)]
+        for f in funcs:
+            v = emb.fn(con, f, emb.dim)
+            if v is not None:
+                rows.append((f, model, emb.kind, emb.dim, _encode(con, v)))
     con.executemany(
         f"INSERT INTO embeddings (func, model, kind, dim, vec) VALUES (?,?,?,?,{vec_param})"
         " ON CONFLICT (func, model) DO UPDATE SET kind=excluded.kind, dim=excluded.dim,"

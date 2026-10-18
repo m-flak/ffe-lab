@@ -132,10 +132,18 @@ CREATE TABLE IF NOT EXISTS names (
     func INTEGER PRIMARY KEY, name TEXT, prob REAL, provenance TEXT,
     written TEXT DEFAULT CURRENT_TIMESTAMP
 );
+-- call-graph structure (graph.py) -----------------------------------------
+CREATE TABLE IF NOT EXISTS graph_features (
+    func INTEGER PRIMARY KEY, fan_in INTEGER, fan_out INTEGER,
+    span REAL,                    -- median link-order distance to call partners
+    height INTEGER,               -- longest call chain below (0 = calls nothing), cycles collapsed
+    depth INTEGER,                -- longest call chain above
+    cycle INTEGER, cycle_size INTEGER   -- the cycle (strongly connected component) it sits in, if any
+);
 -- similarity search (embed.py) ---------------------------------------------
 CREATE TABLE IF NOT EXISTS embeddings (
     func INTEGER, model TEXT,     -- model: which embedder made the vector, e.g. asm-ngram-v1
-    kind TEXT,                    -- asm | fingerprint
+    kind TEXT,                    -- asm | fingerprint | graph
     dim INTEGER,
     vec VECTOR,                   -- pgvector `vector` on Postgres; float32 bytes on SQLite
     created TEXT DEFAULT CURRENT_TIMESTAMP,

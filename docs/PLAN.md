@@ -56,6 +56,12 @@ solves a real problem in ffelab. Keep SQLite as a zero-setup "lite mode".
   `run_key` for item 4. Remaining: measure with the eval harness whether giving
   the blind labeller `similar_functions` improves its accuracy before adding the
   tool to its agent file.
+- **Call-graph structure: built** (D16, `docs/GRAPH.md`). `ffelab graph` adds a
+  spectral basis (`callgraph-spectral-v1`, searchable like the other embeddings),
+  call layers, and two static evidence kinds (neighbour vote, quotient check).
+  Remaining: once experiments settle labels, check the votes' calibration; run
+  the decisive halt in the text-engine cycle; match the maths half against a
+  Frontier: Elite II (68k) disassembly for the authorship question.
 
 ### 4. Durable experiment campaigns (Temporal or Prefect)
 - Long experiment runs as durable workflows: an emulator crash or hang retries

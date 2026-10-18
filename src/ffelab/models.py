@@ -115,7 +115,7 @@ class Experiment(Record):
     run_key: str | None = None
 
 
-EvidenceKind = Literal["call", "static_callee", "log_hit", "log_miss", "halt", "halt_timeout",
+EvidenceKind = Literal["call", "static_callee", "static_graph_knn", "static_quotient", "log_hit", "log_miss", "halt", "halt_timeout",
                        "knockout", "knockout_obs"]
 
 
@@ -138,7 +138,7 @@ class Evidence(Record):
 
     @property
     def is_experimental(self) -> bool:
-        return self.kind not in ("call", "static_callee")
+        return self.kind != "call" and not self.kind.startswith("static_")
 
 
 class BetSpec(Model):
