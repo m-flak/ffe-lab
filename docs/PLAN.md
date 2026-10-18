@@ -67,12 +67,22 @@ solves a real problem in ffelab. Keep SQLite as a zero-setup "lite mode".
   the decisive halt in the text-engine cycle; match the maths half against a
   Frontier: Elite II (68k) disassembly for the authorship question.
 
-### 4. Durable experiment campaigns (Temporal or Prefect)
+### 4. Durable experiment campaigns (Temporal, see D11)
 - Long experiment runs as durable workflows: an emulator crash or hang retries
   from the last save state instead of losing the campaign. Activities: load
   state, logging pass, halt, knockout; each idempotent and recorded.
-- Decide Temporal vs Prefect when starting: Temporal for strict durability and
-  agent-style long workflows, Prefect for a lighter Python-native setup.
+- Temporal chosen (D11).
+- **Status: built** (`src/ffelab/workflows/`, `python -m ffelab.workflows`).
+  Each step is one transaction keyed by a strict run key (D13's
+  `experiments.run_key`), so a retry or a stuck attempt that wakes late can't
+  count evidence twice, and a step that dies mid-write leaves nothing. Harness
+  failures retry on a fresh backend, hangs time out on missing heartbeats, bugs
+  and unknown save states fail once; steer with pause/resume/stop/add_steps.
+  Tested on the fake backend against a real Temporal dev server, on SQLite and
+  Postgres.
+- Remaining: restart QEMU, not just reconnect, when a retry follows a hang;
+  human-question signals wired to the orchestrator's question queue (item 2);
+  first campaign on the real emulator.
 
 ---
 
