@@ -17,6 +17,7 @@ pg = ["psycopg[binary]>=3.1"]
 durable = ["temporalio>=1.7"]
 orchestrator = ["claude-agent-sdk>=0.2.150", "opentelemetry-sdk>=1.30",
                 "opentelemetry-exporter-otlp-proto-http>=1.30"]
+durable = ["temporalio>=1.7"]
 dev = ["pytest>=7"]
 
 [project.scripts]

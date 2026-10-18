@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 from concurrent.futures import ThreadPoolExecutor
 
 from temporalio.client import Client
@@ -97,7 +98,7 @@ def main(argv=None) -> None:
     ap.add_argument("--queue", default=DEFAULT_QUEUE, help="task queue = emulator name")
     sub = ap.add_subparsers(dest="cmd", required=True)
     w = sub.add_parser("worker")
-    w.add_argument("--db", default="ffe.db", help="SQLite path or postgresql:// URL")
+    w.add_argument("--db", default=os.environ.get("FFELAB_DB", "ffe.db"), help="SQLite path or postgresql:// URL (default $FFELAB_DB, else ffe.db)")
     w.add_argument("--backend", default="fake", choices=["fake", "qemu", "dosbox-x"])
     w.add_argument("--emu", default="{}", help="JSON: EmulatorConfig fields (+ binary), or {truth} for fake")
     w.add_argument("--outdir", default="knockouts")
