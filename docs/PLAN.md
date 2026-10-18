@@ -42,6 +42,9 @@ solves a real problem in ffelab. Keep SQLite as a zero-setup "lite mode".
   stop conditions, a batched question queue for the human.
 - Tracing for every agent step, tool call, token count and cost
   (OpenTelemetry + Langfuse or Arize Phoenix).
+- **Built** (`ffelab agents run`, `docs/ORCHESTRATOR.md`, D14, D15). Next: a first
+  live run on the emulator; give the red team `run_halt`/knockouts as orchestrator
+  actions; wrap `run_round` as a durable activity (step 4).
 
 ### 3. Postgres (+ pgvector)
 - Replace SQLite when several agents write concurrently. Same schema; keep a

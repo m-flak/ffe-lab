@@ -7,7 +7,6 @@ Point Claude Code (or any MCP client) at it. Backends: ``fake`` for dry runs,
 """
 from __future__ import annotations
 
-import json
 import os
 
 try:                                   # mcp >= 2
@@ -33,19 +32,8 @@ _backend = None
 def backend():
     global _backend
     if _backend is None:
-        kind = os.environ.get("FFELAB_BACKEND", "fake")
-        if kind == "fake":
-            from .harness.fake import FakeBackend
-            _backend = FakeBackend({"demo": {}})
-        else:
-            from .harness.emulator import EmulatorBackend, EmulatorConfig
-            from .exe import load_map
-            raw = json.loads(os.environ.get("FFELAB_EMU", "{}"))
-            binary = raw.pop("binary", None)            # id from `ffelab exe-check`
-            cfg = EmulatorConfig(**raw | {"kind": kind})
-            pos = (load_map(_con, binary, min_conf=0.7) if binary else
-                   {r["num"]: r["pos"] for r in _con.execute("SELECT num,pos FROM functions WHERE pos IS NOT NULL")})
-            _backend = EmulatorBackend(cfg, pos)
+        from .harness.factory import make_backend
+        _backend = make_backend(os.environ.get("FFELAB_BACKEND", "fake"), _con)
     return _backend
 
 

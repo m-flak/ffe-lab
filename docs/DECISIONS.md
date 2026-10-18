@@ -144,6 +144,33 @@ never evidence; they don't touch beliefs or bets.
 it) or helps but misses (try a code embedding model, measured the same way);
 or the adapter's translations grow beyond a handful (then SQLAlchemy Core).
 
+### D14. The orchestrator is code; agents decide, code acts
+The loop (`ffelab agents run`) is ordinary Python around one Claude Agent SDK
+`query()` per task, not a lead agent delegating to subagents. A lead agent
+can't be held to a budget or to the ledger rules except by asking it nicely;
+code can. So: workers get read-only tools plus `ask_human` and return a
+Pydantic model as structured output; the orchestrator records blind labels,
+places attack bets *before* running the scenario, runs experiments one at a
+time, and checks the budget between steps. Prompts are the `.claude/agents/`
+files the evals measure, so a prompt change shows up in both. Human questions
+are queued in `ffe.db`, never awaited, and the run stops when a batch is waiting.
+The Agent SDK (Claude Code as a library) rather than the plain Messages API:
+it brings the tool loop, turn and spend limits and cost reporting, and the same
+workers can later get emulator tools without new loop code.
+*Would change if:* tasks need open-ended planning across many steps (then a
+lead agent with subagents, still under code-enforced budgets), or the SDK's
+CLI dependency becomes a problem (then the API tool runner).
+
+### D15. Tracing: OpenTelemetry, Phoenix as the default viewer
+Spans are plain OpenTelemetry with both GenAI (`gen_ai.*`) and OpenInference
+attributes, so Langfuse, Phoenix or any OTLP backend can show them and the
+choice is a flag. Phoenix is the default because it runs locally with one
+command (`phoenix serve`), keeps the data on the Mac and needs no Docker;
+self-hosted Langfuse needs Postgres, ClickHouse, Redis and S3-style storage,
+and Langfuse cloud sends traces off the machine.
+*Would change if:* traces need sharing with other people, or prompt management
+and annotation queues matter more than local setup (Langfuse is stronger there).
+
 ### D16. Call-graph structure as static evidence: spectral basis, layers, quotient
 Functions get coordinates from the call graph's own spectral basis (32 smoothest
 Laplacian eigenvectors, stored as embedding `callgraph-spectral-v1`), call layers
