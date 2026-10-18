@@ -74,6 +74,21 @@ ffelab problem and is a skill AI-engineering roles ask for.
 Analysis, agents and the original game (DOSBox/QEMU) run natively on macOS.
 A Windows VM is only needed for FFED3D-specific work.
 
+### D12. Evals: a small custom harness, gold labels from experiments only
+Inspect AI and promptfoo were the candidates. promptfoo is Node and YAML-first;
+Inspect is the better long-term fit but would wrap a ~400-line need (load
+cases, call one agent, score, gate) in a framework before there is any real
+data to score. The custom harness reads the ledger directly and its parts map
+one to one onto Inspect's (dataset, solver, scorer), so a move later is mechanical.
+Gold labels obey the ledger rules: a case exists only when experiment-only
+evidence is decisive (the `settle_claims` test), never from calls, inherited
+names or static derivations. Eval answers are measurements of the agent and are
+never written to the ledger. Cases are split dev/test by a stable hash; tune on
+dev, only read the test score.
+*Would change if:* we need multi-turn agent evals with tool use and sandboxes
+(the red team running real experiments), or a model-graded rubric. That is the
+point to move to Inspect, likely alongside the Agent SDK orchestrator (PLAN 2).
+
 ---
 
 ## Open questions

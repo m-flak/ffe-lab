@@ -10,6 +10,17 @@
       address map (identity if same build, aligned by content otherwise)
   ffelab export --src PATH_TO_FFED3D [--db ffe.db] [--out export] [--min-prob 0.9] [--auto]
       write confirmed names into a copy of ffe.asm as alias labels, plus a diff
+  ffelab eval export --db ffe.db [--out evals/datasets]
+      eval cases from experiment-settled labels (blind labeller and red team)
+  ffelab eval run --dataset FILE [--solver claude|heuristic|replay] [--model M]
+                  [--prompt AGENT.md] [--effort LEVEL] [--split dev|test] [--out REPORT.json]
+      score an agent; prints metrics, writes a report
+  ffelab eval gate --report REPORT.json --baseline BASELINE.json
+      exit 1 if the run is worse than the baseline
+  ffelab eval baseline --report REPORT.json --out BASELINE.json [--margin 0.05]
+      turn a measured run into gate thresholds
+  ffelab eval compare REPORT.json [REPORT.json ...] [--split test]
+      side-by-side table of runs (models, prompts, solvers)
 """
 from __future__ import annotations
 
@@ -107,7 +118,26 @@ def main(argv=None):
     x.add_argument("--min-prob", type=float, default=0.9)
     x.add_argument("--auto", action="store_true",
                    help="also name functions from their deepest experiment-backed label path")
+    ev = sub.add_parser("eval").add_subparsers(dest="eval_cmd", required=True)
+    ex = ev.add_parser("export"); ex.add_argument("--db", default="ffe.db", type=Path)
+    ex.add_argument("--out", default="evals/datasets", type=Path)
+    ex.add_argument("--threshold", type=float, default=0.95); ex.add_argument("--min-evidence", type=int, default=3)
+    er = ev.add_parser("run"); er.add_argument("--dataset", required=True, type=Path)
+    er.add_argument("--solver", choices=["claude", "heuristic", "replay"], default="claude")
+    er.add_argument("--model", default=None); er.add_argument("--prompt", type=Path, default=None)
+    er.add_argument("--effort", default=None, choices=["low", "medium", "high", "xhigh", "max"])
+    er.add_argument("--replay", type=Path, help="report to replay answers from (--solver replay)")
+    er.add_argument("--split", choices=["dev", "test"], default=None); er.add_argument("--out", type=Path)
+    eg = ev.add_parser("gate"); eg.add_argument("--report", required=True, type=Path)
+    eg.add_argument("--baseline", required=True, type=Path)
+    eb = ev.add_parser("baseline"); eb.add_argument("--report", required=True, type=Path)
+    eb.add_argument("--out", required=True, type=Path); eb.add_argument("--margin", type=float, default=0.05)
+    eb.add_argument("--split", default="all")
+    ec = ev.add_parser("compare"); ec.add_argument("reports", nargs="+", type=Path)
+    ec.add_argument("--split", default="all")
     a = ap.parse_args(argv)
+    if a.cmd == "eval":
+        return eval_cmd(a)
     if a.cmd == "build":
         r = build(a.src, a.db, a.out, a.docs)
         print(json.dumps(r["report"], indent=2))
@@ -126,5 +156,60 @@ def main(argv=None):
             print(f"FUNC_{f:06d}  entropy={h:.2f} bits")
 
 
+def eval_cmd(a) -> int:
+    from .evals import dataset as ds
+    from .evals import runner
+    from .evals import solvers as sv
+    if a.eval_cmd == "export":
+        led = Ledger(dbmod.connect(a.db))
+        for name, cases in (("blind.jsonl", ds.export_blind(led, a.threshold, a.min_evidence)),
+                            ("redteam.jsonl", ds.export_red_team(led))):
+            ds.save(cases, a.out / name)
+            n_test = sum(c.split == "test" for c in cases)
+            print(f"{a.out / name}: {len(cases)} cases ({n_test} held out as test)")
+        return 0
+    if a.eval_cmd == "run":
+        cases = ds.load(a.dataset)
+        task = cases[0].task if cases else "blind_label"
+        if a.solver == "claude":
+            solver = sv.ClaudeSolver(task, a.model or sv.DEFAULT_MODEL, a.prompt, a.effort)
+        elif a.solver == "replay":
+            solver = sv.ReplaySolver(a.replay)
+        else:
+            solver = sv.HeuristicSolver(task)
+
+        def progress(i, n, r):
+            mark = "ok " if r.correct else ("ERR" if r.output.error else "no ")
+            print(f"  [{i}/{n}] {mark} {r.case_id}", flush=True)
+        rep = runner.run(cases, solver, str(a.dataset), a.split, progress)
+        for split, m in rep.metrics.items():
+            print(f"{split}: " + json.dumps(m.model_dump(exclude={"by_subsystem"})))
+        if a.out:
+            a.out.parent.mkdir(parents=True, exist_ok=True)
+            a.out.write_text(rep.model_dump_json(indent=1))
+            print(f"report: {a.out}")
+        return 0
+    if a.eval_cmd == "gate":
+        rep = runner.EvalReport.model_validate_json(a.report.read_text())
+        base = runner.Baseline.model_validate_json(a.baseline.read_text())
+        fails = runner.gate(rep, base)
+        tag = f" ({base.status})" if base.status != "measured" else ""
+        for f in fails:
+            print(f"FAIL{tag}: {f}")
+        if not fails:
+            print(f"PASS{tag}: {rep.solver} meets {a.baseline}")
+        return 1 if fails else 0
+    if a.eval_cmd == "baseline":
+        rep = runner.EvalReport.model_validate_json(a.report.read_text())
+        a.out.write_text(runner.baseline_from(rep, a.split, a.margin).model_dump_json(indent=1) + "\n")
+        print(f"wrote {a.out}")
+        return 0
+    if a.eval_cmd == "compare":
+        reps = [runner.EvalReport.model_validate_json(p.read_text()) for p in a.reports]
+        print(runner.compare(reps, a.split))
+        return 0
+    return 2
+
+
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

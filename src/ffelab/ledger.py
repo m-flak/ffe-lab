@@ -24,11 +24,9 @@ import math
 import sqlite3
 
 from . import labels as lbl
+from .models import TOP_LABELS, Bet, BetSpec, ClaimInput, Evidence, Experiment
 
-DEFAULT_LABELS = [
-    "render", "physics", "ai", "ui", "mission", "economy", "sysgen",
-    "io", "audio", "math", "text", "platform", "unknown",
-]
+DEFAULT_LABELS = list(TOP_LABELS)
 
 # Prior reliability by source kind and how many pseudo-bets that prior is worth.
 # Kept small so a run of misses pulls reliability down quickly.
@@ -130,6 +128,7 @@ class Ledger:
         the function. Effective strength = confidence x reliability(source, domain).
         The call is recorded as an open *claim* bet, settled by experiment evidence only.
         """
+        ClaimInput(func=func, label=label, confidence=confidence, source=source, domain=domain)
         path = lbl.validate(label, self.labels)
         label = lbl.top(path)
         lbl.register(self.con, path, source)
@@ -162,6 +161,8 @@ class Ledger:
         {"scenario": "docked", "func": 12, "min_rate": 0.9} / {"max_rate": 0.05}."""
         if not 0.0 <= prob <= 1.0:
             raise ValueError("prob must be in [0, 1]")
+        if spec is not None:
+            spec = BetSpec.model_validate(spec).model_dump(exclude_defaults=True)
         cur = self.con.execute(
             "INSERT INTO bets (source, domain, func, claim, prediction, prob, kind, label, spec, parent_id)"
             " VALUES (?,?,?,?,?,?,?,?,?,?)",
@@ -238,6 +239,22 @@ class Ledger:
             done.append({"bet": bet["id"], "source": bet["source"], "label": bet["label"],
                          "settled_as": top, "outcome": outcome, "brier": brier})
         return done
+
+    def get_bet(self, bet_id: int) -> Bet:
+        row = self.con.execute("SELECT * FROM bets WHERE id=?", (bet_id,)).fetchone()
+        if row is None:
+            raise KeyError(f"no bet {bet_id}")
+        return Bet.from_row(row)
+
+    def get_experiment(self, experiment_id: int) -> Experiment:
+        row = self.con.execute("SELECT * FROM experiments WHERE id=?", (experiment_id,)).fetchone()
+        if row is None:
+            raise KeyError(f"no experiment {experiment_id}")
+        return Experiment.from_row(row)
+
+    def evidence(self, func: int) -> list[Evidence]:
+        return [Evidence.from_row(r) for r in
+                self.con.execute("SELECT * FROM evidence WHERE func=? ORDER BY id", (func,))]
 
     def open_bets(self, func: int | None = None) -> list[sqlite3.Row]:
         q = "SELECT * FROM bets WHERE outcome IS NULL" + (" AND func=?" if func is not None else "")

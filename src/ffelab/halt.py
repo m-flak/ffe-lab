@@ -2,7 +2,8 @@
 
 A halt freezes the game at one function. ``HaltSnapshot`` is the standard
 record of everything captured there; ``score_halt`` turns it into a
-likelihood over subsystem labels for the ledger.
+likelihood over subsystem labels for the ledger. (The model itself
+lives in ``models.py`` with the other records.)
 
 Each rule multiplies in a modest factor (1.3x-3x) so no single halt can
 dominate a belief: many consistent halts move it, one weird halt doesn't.
@@ -11,39 +12,8 @@ them as your calibration data comes in.
 """
 from __future__ import annotations
 
-import json
-from dataclasses import asdict, dataclass, field
-
 from .ledger import DEFAULT_LABELS
-
-
-@dataclass
-class HaltSnapshot:
-    func: int                                  # function number halted at
-    scenario: str                              # save state / scenario name
-    hits: int = 1                              # hits observed in the logging pass
-    frames: int = 1                            # frames elapsed in that pass
-    stack: list[int] = field(default_factory=list)          # callers, innermost first
-    regs: dict[str, int] = field(default_factory=dict)
-    args: list[int] = field(default_factory=list)           # first stack args
-    pointer_regions: list[str] = field(default_factory=list)  # named regions args point into
-    value_kinds: list[str] = field(default_factory=list)    # e.g. "ascii", "fixed16", "int64"
-    mem_reads: list[int] = field(default_factory=list)
-    mem_writes: list[int] = field(default_factory=list)
-    context: list[str] = field(default_factory=list)        # scenario tags: docked, combat, ...
-    trigger: str | None = None                 # input that preceded the hit, e.g. "F1"
-    screenshot: str | None = None
-
-    @property
-    def hits_per_frame(self) -> float:
-        return self.hits / max(self.frames, 1)
-
-    def to_json(self) -> str:
-        return json.dumps(asdict(self))
-
-    @classmethod
-    def from_json(cls, s: str) -> "HaltSnapshot":
-        return cls(**json.loads(s))
+from .models import HaltSnapshot  # noqa: F401  (re-exported; defined with the other records)
 
 
 RULES = {
