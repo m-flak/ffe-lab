@@ -3,6 +3,8 @@ import json
 import unittest
 from unittest import mock
 
+from store import fresh_db
+
 from ffelab import behavior
 from ffelab import db as dbmod
 from ffelab.harness.fake import FakeBackend
@@ -28,8 +30,8 @@ except ImportError:
     TracerProvider = None
 
 
-def setup(n=6):
-    con = dbmod.connect(":memory:")
+def setup(n=6, con=None):
+    con = con or fresh_db()                               # SQLite, or Postgres with FFELAB_TEST_PG
     con.executemany("INSERT INTO functions (num, pos, ord, name, n_ins, has_frame, aligned4, asm_text)"
                     " VALUES (?,?,?,?,?,?,?,?)",
                     [(i, 0x1000 + 16 * i, i - 1, f"Thing{i}", 10, 1, 1,
@@ -468,8 +470,7 @@ class TestCli(unittest.TestCase):
         from ffelab.cli import main
         with tempfile.TemporaryDirectory() as d:
             db = Path(d) / "t.db"
-            L = setup()
-            L.con.execute(f"VACUUM INTO '{db}'")
+            setup(con=dbmod.connect(db)).con.close()     # the CLI test always uses a SQLite file
             buf = io.StringIO()
             with redirect_stdout(buf):
                 main(["agents", "run", "--db", str(db), "--worker", "heuristic", "--rounds", "2",
