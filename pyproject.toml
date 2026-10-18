@@ -14,6 +14,7 @@ agent = ["mcp>=1.0"]
 emu = ["unicorn>=2.0"]
 evals = ["anthropic>=1.0"]
 pg = ["psycopg[binary]>=3.1"]
+durable = ["temporalio>=1.7"]
 dev = ["pytest>=7"]
 
 [project.scripts]
