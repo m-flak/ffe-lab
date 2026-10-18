@@ -10,6 +10,12 @@
       address map (identity if same build, aligned by content otherwise)
   ffelab export --src PATH_TO_FFED3D [--db ffe.db] [--out export] [--min-prob 0.9] [--auto]
       write confirmed names into a copy of ffe.asm as alias labels, plus a diff
+  ffelab embed [--db ffe.db] [--model asm-ngram-v1|fp-scenario-v1|all]
+      compute embeddings for similarity search
+  ffelab similar FUNC [--db ffe.db] [--model asm-ngram-v1] [-k 10]
+      functions most like FUNC (numbers and scores only; no names or beliefs)
+  ffelab db copy --from ffe.db --to postgresql:///ffelab
+      copy a whole store into an empty one (SQLite -> Postgres, or back)
   ffelab eval export --db ffe.db [--out evals/datasets]
       eval cases from experiment-settled labels (blind labeller and red team)
   ffelab eval run --dataset FILE [--solver claude|heuristic|replay] [--model M]
@@ -21,11 +27,14 @@
       turn a measured run into gate thresholds
   ffelab eval compare REPORT.json [REPORT.json ...] [--split test]
       side-by-side table of runs (models, prompts, solvers)
+
+--db takes a SQLite file or a postgresql:// URL, and defaults to $FFELAB_DB, else ffe.db.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 from . import db as dbmod
@@ -35,7 +44,7 @@ from .segment import family_integrity, segment, segments_table
 from .tables import find_tables
 
 
-def build(src: Path, db_path: Path, out: Path, docs: Path) -> dict:
+def build(src: Path, db_path: str | Path, out: Path, docs: Path) -> dict:
     funcs = parse_asm(src / "ffe.asm")
     tables = find_tables(src / "ffedat.asm")
     con = dbmod.connect(db_path)
@@ -102,24 +111,34 @@ def render_markdown(r: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+DEFAULT_DB = os.environ.get("FFELAB_DB", "ffe.db")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="ffelab")
     sub = ap.add_subparsers(dest="cmd", required=True)
     b = sub.add_parser("build"); b.add_argument("--src", required=True, type=Path)
-    b.add_argument("--db", default="ffe.db", type=Path); b.add_argument("--out", default="data", type=Path)
+    b.add_argument("--db", default=DEFAULT_DB); b.add_argument("--out", default="data", type=Path)
     b.add_argument("--docs", default="docs", type=Path)
-    u = sub.add_parser("uncertain"); u.add_argument("--db", default="ffe.db", type=Path)
+    u = sub.add_parser("uncertain"); u.add_argument("--db", default=DEFAULT_DB)
     u.add_argument("-n", type=int, default=20)
     e = sub.add_parser("exe-check"); e.add_argument("exe", type=Path)
-    e.add_argument("--db", default="ffe.db", type=Path)
+    e.add_argument("--db", default=DEFAULT_DB)
     e.add_argument("--map", action="store_true", help="align by content even if it's the same build")
     x = sub.add_parser("export"); x.add_argument("--src", required=True, type=Path)
-    x.add_argument("--db", default="ffe.db", type=Path); x.add_argument("--out", default="export", type=Path)
+    x.add_argument("--db", default=DEFAULT_DB); x.add_argument("--out", default="export", type=Path)
     x.add_argument("--min-prob", type=float, default=0.9)
     x.add_argument("--auto", action="store_true",
                    help="also name functions from their deepest experiment-backed label path")
+    em = sub.add_parser("embed"); em.add_argument("--db", default=DEFAULT_DB)
+    em.add_argument("--model", default="all")
+    sm = sub.add_parser("similar"); sm.add_argument("func", type=int); sm.add_argument("--db", default=DEFAULT_DB)
+    sm.add_argument("--model", default="asm-ngram-v1"); sm.add_argument("-k", type=int, default=10)
+    dbc = sub.add_parser("db").add_subparsers(dest="db_cmd", required=True)
+    cp = dbc.add_parser("copy"); cp.add_argument("--from", dest="src", required=True)
+    cp.add_argument("--to", dest="dst", required=True)
     ev = sub.add_parser("eval").add_subparsers(dest="eval_cmd", required=True)
-    ex = ev.add_parser("export"); ex.add_argument("--db", default="ffe.db", type=Path)
+    ex = ev.add_parser("export"); ex.add_argument("--db", default=DEFAULT_DB)
     ex.add_argument("--out", default="evals/datasets", type=Path)
     ex.add_argument("--threshold", type=float, default=0.95); ex.add_argument("--min-evidence", type=int, default=3)
     er = ev.add_parser("run"); er.add_argument("--dataset", required=True, type=Path)
@@ -150,6 +169,19 @@ def main(argv=None):
         from . import export
         r = export.export(dbmod.connect(a.db), a.src, a.out, a.min_prob, a.auto)
         print(json.dumps({k: v for k, v in r.items() if k != "names"}, indent=2))
+    elif a.cmd == "embed":
+        from . import embed
+        con = dbmod.connect(a.db)
+        for model in (embed.MODELS if a.model == "all" else [a.model]):
+            print(f"{model}: {embed.build(con, model)} functions")
+    elif a.cmd == "similar":
+        from . import embed
+        for r in embed.similar(dbmod.connect(a.db), a.func, a.model, a.k):
+            print(f"FUNC_{r['func']:06d}  {r['score']:.3f}")
+    elif a.cmd == "db":
+        counts = dbmod.copy(dbmod.connect(a.src), dbmod.connect(a.dst))
+        print(json.dumps(counts, indent=2))
+        print("embeddings are not copied; run `ffelab embed --db DEST`")
     elif a.cmd == "uncertain":
         led = Ledger(dbmod.connect(a.db))
         for f, h in led.most_uncertain(a.n):

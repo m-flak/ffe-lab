@@ -1,6 +1,7 @@
 """MCP server: the tool surface an AI agent uses to play, break and learn.
 
 Run:  FFELAB_DB=ffe.db FFELAB_BACKEND=fake python -m ffelab.mcp_server
+      (FFELAB_DB may be a postgresql:// URL, so several agents can share one ledger)
 Point Claude Code (or any MCP client) at it. Backends: ``fake`` for dry runs,
 ``qemu`` / ``dosbox-x`` for the real game (see harness/emulator.py).
 """
@@ -171,6 +172,16 @@ def adversary_report(source: str = "adversary") -> dict:
 def blind_view(func: int) -> dict:
     """A function's code and structure with no beliefs, claims or inherited names."""
     return adv.blind_view(_ledger, func)
+
+
+@mcp.tool()
+def similar_functions(func: int, k: int = 10, model: str = "asm-ngram-v1") -> list:
+    """Functions most like ``func``: by instruction patterns (model asm-ngram-v1) or by
+    the scenarios they fire in (fp-scenario-v1). Numbers and cosine scores only, no
+    names, labels or beliefs; open a match with blind_view. Similarity is a hint
+    for where to look, never evidence."""
+    from . import embed
+    return embed.similar(_con, func, model, k)
 
 
 @mcp.tool()

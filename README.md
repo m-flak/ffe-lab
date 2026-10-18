@@ -30,7 +30,7 @@ pip install -e ".[agent,evals,dev]"
 
 ffelab build --src ../ffed3d               # → ffe.db, data/module_map.json, docs/MODULE_MAP.md
 ffelab exe-check path/to/FIRSTENC.EXE      # is your game exe the build the asm describes?
-python -m pytest                            # 70 tests
+python -m pytest                            # 83 tests
 FFED3D_DIR=../ffed3d python -m pytest       # also runs the real-data test
 ```
 
@@ -42,8 +42,10 @@ FFED3D_DIR=../ffed3d python -m pytest       # also runs the real-data test
 | `ffelab exe-check EXE [--map]` | Check an exe against the asm's layout; store a per-binary address map (identity, or aligned by content for other builds) |
 | `ffelab export --src DIR [--auto]` | Write confirmed names into a copy of `ffe.asm` as alias labels, plus a reviewable diff |
 | `ffelab uncertain` | The most uncertain functions, where the agent should look next |
+| `ffelab embed` / `ffelab similar FUNC` | Embed every function's normalised code (and scenario fingerprints); list the functions most like one |
+| `ffelab db copy --from ffe.db --to postgresql:///ffelab` | Move the whole store to Postgres (or back to a file) |
 | `ffelab eval run / gate / compare / export` | Score the blind labeller and red team against experiment-confirmed labels; gate prompt changes on it (see `docs/EVALS.md`) |
-| `python -m ffelab.mcp_server` | The MCP server agents use (31 tools) |
+| `python -m ffelab.mcp_server` | The MCP server agents use (32 tools) |
 
 ## Modules
 
@@ -110,13 +112,17 @@ See `docs/MODULE_MAP.md` for the full table.
 }
 ```
 
+`FFELAB_DB` (here and for every `ffelab` command) can also be a Postgres URL such
+as `postgresql:///ffelab`, so several agents can share one ledger; see
+GETTING_STARTED 4.4.
+
 For the real game set `FFELAB_BACKEND` to `qemu` or `dosbox-x` and `FFELAB_EMU`
 to a JSON `EmulatorConfig`, e.g. `{"binary": "<id from exe-check>", "code_base": 0, "gdb_port": 1234}`.
 
 ## Status
 
 - Working: static map, ledger, adversarial layer, fingerprints, propagation,
-  knockouts, exe-check, export, Pydantic models, eval harness with a gate. 70 tests, unit-tested against fakes plus one
+  knockouts, exe-check, export, Pydantic models, eval harness with a gate, Postgres + pgvector beside SQLite. 83 tests (all also pass on Postgres), unit-tested against fakes plus one
   real-data test.
 - **Not yet run against a live emulator.** Expect one session of tuning key maps,
   timings and the code base address.

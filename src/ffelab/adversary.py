@@ -172,11 +172,12 @@ def record_blind(ledger: Ledger, func: int, label: str, confidence: float, sourc
     """Store a blind label. It also enters the ledger as an ordinary claim (an opinion)."""
     BlindLabelInput(func=func, label=label, confidence=confidence, source=source)
     label = lbl.validate(label, ledger.labels)
-    cur = ledger.con.execute("INSERT INTO blind_labels (func, source, label, confidence) VALUES (?,?,?,?)",
-                             (func, source, label, confidence))
+    blind_id = ledger.con.execute(
+        "INSERT INTO blind_labels (func, source, label, confidence) VALUES (?,?,?,?) RETURNING id",
+        (func, source, label, confidence)).fetchone()["id"]
     ledger.con.commit()
     ledger.call(func, label, confidence, source=source, detail="blind")
-    return int(cur.lastrowid)
+    return int(blind_id)
 
 
 def reveal(ledger: Ledger, func: int) -> list[dict]:

@@ -27,7 +27,7 @@ import os
 
 from . import labels as lbl
 from .harness.backend import GameBackend
-from .ledger import Ledger
+from .ledger import AlreadyResolved, Ledger
 from .models import KnockoutObservationInput
 
 VISIBLE_THRESHOLD = 0.0005          # fraction of changed pixels counted as a visible effect
@@ -135,7 +135,11 @@ def _resolve_knockout_bets(ledger: Ledger, exp: int, scenario: str, func: int, o
         if not spec.get("knockout") or spec.get("func") != func or spec.get("scenario") != scenario:
             continue
         hit = spec.get("expect") == outcome
-        done.append({"bet": bet["id"], "outcome": hit, "brier": ledger.resolve_bet(bet["id"], hit, exp)})
+        try:
+            brier = ledger.resolve_bet(bet["id"], hit, exp)
+        except AlreadyResolved:
+            continue
+        done.append({"bet": bet["id"], "outcome": hit, "brier": brier})
     return done
 
 
