@@ -30,7 +30,7 @@ pip install -e ".[agent,evals,orchestrator,dev]"
 
 ffelab build --src ../ffed3d               # → ffe.db, data/module_map.json, docs/MODULE_MAP.md
 ffelab exe-check path/to/FIRSTENC.EXE      # is your game exe the build the asm describes?
-python -m pytest                            # 99 tests
+python -m pytest                            # 118 tests
 FFED3D_DIR=../ffed3d python -m pytest       # also runs the real-data test
 ```
 
@@ -128,7 +128,7 @@ to a JSON `EmulatorConfig`, e.g. `{"binary": "<id from exe-check>", "code_base":
 ## Status
 
 - Working: static map, ledger, adversarial layer, fingerprints, propagation,
-  knockouts, exe-check, export, Pydantic models, eval harness with a gate, Postgres + pgvector beside SQLite, call-graph structure, Agent SDK orchestrator with tracing. 99 tests (all also pass on Postgres), unit-tested against fakes plus one
+  knockouts, exe-check, export, Pydantic models, eval harness with a gate, Postgres + pgvector beside SQLite, call-graph structure, Agent SDK orchestrator with tracing. 118 tests (all also pass on Postgres), unit-tested against fakes plus one
   real-data test.
 - **Not yet run against a live emulator.** Expect one session of tuning key maps,
   timings and the code base address.

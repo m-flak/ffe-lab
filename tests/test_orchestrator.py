@@ -275,7 +275,8 @@ class TestGraphTools(unittest.TestCase):
             from ffelab.orchestrator.workers import system_prompt, tool_names
             self.assertEqual(tool_names("blind-labeller"), ["blind_view", "ask_human"])
             self.assertEqual(tool_names("red-team"), ["blind_view", "list_scenarios", "ask_human"])
-            self.assertNotIn("similar_functions", system_prompt("blind-labeller"))
+            note = system_prompt("blind-labeller").rsplit("\n\n", 1)[1]   # the orchestrator's note
+            self.assertIn("Your tools are blind_view, ask_human.", note)
 
     def test_with_the_modules(self):
         L = setup()
@@ -289,9 +290,9 @@ class TestGraphTools(unittest.TestCase):
             self.assertEqual(set(red), {"blind_view", "list_scenarios", "similar_functions",
                                         "quotient_outliers", "ask_human"})
             self.assertNotIn("graph_votes", blind + red)                  # writes evidence: never a worker tool
-            self.assertIn("call_layers", system_prompt("blind-labeller"))
-            self.assertNotIn("quotient_outliers", system_prompt("blind-labeller"))
-            self.assertIn("quotient_outliers", system_prompt("red-team"))
+            self.assertIn("Your tools are blind_view, similar_functions, ask_human.",
+                          system_prompt("blind-labeller").rsplit("\n\n", 1)[1])
+            self.assertIn("quotient_outliers", system_prompt("red-team").rsplit("\n\n", 1)[1])
 
             res = WorkerResult(worker="w", kind="red-team", task="t")
             tools = {t.name: t for t in build_tools(L, "red-team", res)}

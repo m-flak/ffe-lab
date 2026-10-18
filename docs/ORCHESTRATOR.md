@@ -39,7 +39,7 @@ budget and the ledger rules, and records every step as a trace. The LLM agents
 
 | tool | blind labeller | red team | needs |
 |---|---|---|---|
-| `blind_view` (code, structure, `call_layers` once graph.py is in) | yes | yes | |
+| `blind_view` (code, structure, `call_layers`) | yes | yes | |
 | `similar_functions` (numbers and cosine scores only; `asm-ngram-v1` or `callgraph-spectral-v1`) | yes | yes | `embed.py` |
 | `list_scenarios` | | yes | |
 | `quotient_outliers` (calls between labels nothing else supports) | | yes | `graph.py` |

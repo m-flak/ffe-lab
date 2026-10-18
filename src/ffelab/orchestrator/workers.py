@@ -129,24 +129,9 @@ ORCHESTRATOR_NOTE = {
         "running the scenario, and the run resolves it. If no registered scenario separates claim "
         "from rival, don't attack; you may ask_human for the save state you would need."),
 }
-GRAPH_NOTE = (
-    " similar_functions returns function numbers and cosine scores only (model asm-ngram-v1: "
-    "instruction patterns; callgraph-spectral-v1: position in the call graph); open a match with "
-    "blind_view. A similar function is a hint for where to look, never evidence. blind_view's "
-    "call_layers (height: longest call chain below, depth: above, cycle_size: size of the call "
-    "cycle it is in) is structure only.")
-OUTLIER_NOTE = (
-    " quotient_outliers lists calls between two labelled functions that no other labelled call "
-    "supports: each is a mislabel or a real cross-layer call, a lead for an attack, not a verdict.")
-
-
 def system_prompt(kind: WorkerKind, prompt_path: str | Path | None = None) -> str:
-    names = tool_names(kind)
-    note = ORCHESTRATOR_NOTE[kind].replace("{tools}", ", ".join(names))
-    if "similar_functions" in names:
-        note += GRAPH_NOTE
-    if "quotient_outliers" in names:
-        note += OUTLIER_NOTE
+    # The agent files explain each tool; the note says which ones this worker actually has.
+    note = ORCHESTRATOR_NOTE[kind].replace("{tools}", ", ".join(tool_names(kind)))
     return load_agent_prompt(kind, prompt_path) + "\n\n" + note
 
 
@@ -210,12 +195,12 @@ def build_tools(ledger: Ledger, kind: WorkerKind, result: WorkerResult, parent=N
         return "queued for the human; carry on with your best answer"
 
     def similar_functions(a):
-        from .. import embed
+        embed = importlib.import_module(NEEDS["similar_functions"])
         model = a.get("model") or embed.DEFAULT_MODEL
         return embed.similar(ledger.con, int(a["func"]), model, int(a.get("k", 10)))
 
     def quotient_outliers(a):
-        from .. import graph
+        graph = importlib.import_module(NEEDS["quotient_outliers"])
         out = graph.outliers(ledger)
         if a.get("func") is not None:
             out = [o for o in out if int(a["func"]) in (o["caller"], o["callee"])]
