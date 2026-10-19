@@ -25,6 +25,9 @@ def frame(payload: str) -> bytes:
 class GdbRemote:
     def __init__(self, host: str = "127.0.0.1", port: int = 1234, timeout: float = 5.0):
         self.sock = socket.create_connection((host, port), timeout=timeout)
+        # Each request is a small write right after our '+' ack; without this, Nagle's
+        # algorithm holds it for the peer's delayed ACK (~40 ms or more per round trip).
+        self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.buf = b""
 
     def close(self) -> None:
