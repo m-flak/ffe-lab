@@ -40,6 +40,12 @@
       the batched questions agents and contradictions have queued for you
   ffelab agents answer ID TEXT [--claim LABEL --confidence P] [--close explained|claim_withdrawn]
   ffelab agents dismiss ID
+  ffelab research view FUNC | refs DATA | grep REGEX       (read; names included)
+  ffelab research claim FUNC LABEL -c P --basis TEXT [--source ai:muse]
+  ffelab research import CLAIMS.jsonl [--source ai:muse]
+  ffelab research retag OLD_SOURCE NEW_SOURCE
+      static research (docs/STATIC_RESEARCH.md): read freely, write claims only;
+      --source defaults to $FFELAB_SOURCE
 
 --db takes a SQLite file or a postgresql:// URL, and defaults to $FFELAB_DB, else ffe.db.
 """
@@ -192,7 +198,23 @@ def main(argv=None):
     aa.add_argument("--confidence", type=float)
     aa.add_argument("--close", choices=["explained", "claim_withdrawn"], help="close the contradiction asked about")
     ad = ag.add_parser("dismiss"); ad.add_argument("id", type=int); ad.add_argument("--db", default=DEFAULT_DB)
+    rs = sub.add_parser("research").add_subparsers(dest="research_cmd", required=True)
+    src_default = os.environ.get("FFELAB_SOURCE")
+    rv = rs.add_parser("view"); rv.add_argument("func"); rv.add_argument("--max-lines", type=int, default=200)
+    rr = rs.add_parser("refs"); rr.add_argument("data")
+    rg = rs.add_parser("grep"); rg.add_argument("pattern"); rg.add_argument("-n", type=int, default=50)
+    rc = rs.add_parser("claim"); rc.add_argument("func"); rc.add_argument("label")
+    rc.add_argument("-c", "--confidence", type=float, required=True)
+    rc.add_argument("--basis", required=True, help="the static facts the claim rests on")
+    ri = rs.add_parser("import"); ri.add_argument("file", type=Path)
+    for p in (rc, ri):
+        p.add_argument("--source", default=src_default, required=src_default is None)
+    rt = rs.add_parser("retag"); rt.add_argument("old"); rt.add_argument("new")
+    for p in (rv, rr, rg, rc, ri, rt):
+        p.add_argument("--db", default=DEFAULT_DB)
     a = ap.parse_args(argv)
+    if a.cmd == "research":
+        return research_cmd(a)
     if a.cmd == "eval":
         return eval_cmd(a)
     if a.cmd == "agents":
@@ -238,6 +260,32 @@ def main(argv=None):
         led = Ledger(dbmod.connect(a.db))
         for f, h in led.most_uncertain(a.n):
             print(f"FUNC_{f:06d}  entropy={h:.2f} bits")
+
+
+def research_cmd(a) -> int:
+    from . import research as rs
+    led = Ledger(dbmod.connect(a.db))
+    try:
+        if a.research_cmd == "view":
+            r = rs.view(led, rs.func_num(a.func), a.max_lines)
+            asm = r.pop("asm")
+            print(json.dumps(r, indent=2)); print(asm)
+            return 0
+        if a.research_cmd == "refs":
+            r = rs.refs(led.con, rs.data_num(a.data))
+        elif a.research_cmd == "grep":
+            r = rs.grep(led.con, a.pattern, a.n)
+        elif a.research_cmd == "claim":
+            r = rs.claim(led, rs.func_num(a.func), a.label, a.confidence, a.source, a.basis)
+        elif a.research_cmd == "import":
+            r = rs.import_claims(led, a.file, a.source)
+        else:
+            r = rs.retag(led.con, a.old, a.new)
+    except (ValueError, KeyError) as e:
+        print(f"refused: {e}")
+        return 1
+    print(json.dumps(r, indent=2))
+    return 0
 
 
 def eval_cmd(a) -> int:

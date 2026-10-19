@@ -22,9 +22,10 @@ from . import propagate as prop
 from . import db as dbmod
 from .ledger import Ledger
 from .loop import halt_and_score, logging_pass, rank_targets
+from .mcp_thread import on_db_thread, tool
 
 mcp = FastMCP("ffelab")
-_con = dbmod.connect(os.environ.get("FFELAB_DB", "ffe.db"))
+_con = on_db_thread(dbmod.connect, os.environ.get("FFELAB_DB", "ffe.db"))   # used only on the tool thread
 _ledger = Ledger(_con)
 _backend = None
 
@@ -38,26 +39,26 @@ def backend():
 
 
 # ---------------------------------------------------------------- game control
-@mcp.tool()
+@tool(mcp)
 def load_state(name: str) -> str:
     """Restore an emulator save state (a ready-made game situation)."""
     backend().load_state(name); return f"loaded {name}"
 
 
-@mcp.tool()
+@tool(mcp)
 def press_keys(keys: list[str]) -> str:
     """Send key presses to the game, e.g. ["F1", "F1"] or ["Esc"]."""
     backend().press_keys(keys); return f"pressed {keys}"
 
 
-@mcp.tool()
+@tool(mcp)
 def screenshot(path: str = "shot.png") -> str:
     """Capture the game screen to a file; read it to see what's happening."""
     return backend().screenshot(path)
 
 
 # ---------------------------------------------------------------- experiments
-@mcp.tool()
+@tool(mcp)
 def rank_breakpoints(context: list[str], candidates: list[int] | None = None, k: int = 30) -> list:
     """Functions where a logging breakpoint in a scenario with these tags is most informative."""
     cands = candidates or [f for f, _ in _ledger.most_uncertain(400)]
@@ -68,7 +69,7 @@ def _ctx(scenario: str, context: list[str] | None) -> list[str]:
     return context if context is not None else sorted(behavior.scenarios(_ledger).get(scenario, set()))
 
 
-@mcp.tool()
+@tool(mcp)
 def run_logging_pass(scenario: str, funcs: list[int], context: list[str] | None = None,
                      keys: list[str] | None = None) -> dict:
     """Count hits on many functions in one scenario; updates beliefs from hits and misses,
@@ -76,7 +77,7 @@ def run_logging_pass(scenario: str, funcs: list[int], context: list[str] | None 
     return logging_pass(backend(), _ledger, scenario, funcs, _ctx(scenario, context), keys)
 
 
-@mcp.tool()
+@tool(mcp)
 def run_halt(scenario: str, func: int, context: list[str] | None = None, keys: list[str] | None = None) -> str:
     """Freeze the game at one function, capture stack/args/regs, update its belief."""
     snap = halt_and_score(backend(), _ledger, scenario, func, _ctx(scenario, context), keys=keys)
@@ -84,7 +85,7 @@ def run_halt(scenario: str, func: int, context: list[str] | None = None, keys: l
 
 
 # ---------------------------------------------------------------- ledger
-@mcp.tool()
+@tool(mcp)
 def belief(func: int) -> dict:
     """Current label probabilities for a function, its experiment-only belief, open claims
     and static facts. (Red-team and blind agents should use blind_view instead.)"""
@@ -98,7 +99,7 @@ def belief(func: int) -> dict:
             "open_bets": [dict(b) for b in _ledger.open_bets(func)]}
 
 
-@mcp.tool()
+@tool(mcp)
 def place_bet(source: str, claim: str, prediction: str, prob: float, func: int | None = None,
               domain: str | None = None, scenario: str | None = None, expect: str | None = None) -> int:
     """Record a falsifiable prediction BEFORE running the experiment that tests it.
@@ -107,26 +108,26 @@ def place_bet(source: str, claim: str, prediction: str, prob: float, func: int |
     return _ledger.place_bet(source, func, claim, prediction, prob, domain, spec=spec)
 
 
-@mcp.tool()
+@tool(mcp)
 def resolve_bet(bet_id: int, outcome: bool, experiment_id: int) -> float:
     """Resolve a bet by citing the experiment (from a run_* tool) that decided it.
     Rejected if the experiment predates the bet or didn't test the bet's function."""
     return _ledger.resolve_bet(bet_id, outcome, experiment_id)
 
 
-@mcp.tool()
+@tool(mcp)
 def settle_claims() -> list:
     """Resolve label claims where experiment-only evidence is now decisive."""
     return _ledger.settle_claims()
 
 
-@mcp.tool()
+@tool(mcp)
 def contradictions() -> list:
     """Open contradictions: experiments disagree with a confident claim. Review these first."""
     return _ledger.contradictions()
 
 
-@mcp.tool()
+@tool(mcp)
 def close_contradiction(contradiction_id: int, status: str) -> str:
     """Close a contradiction as 'explained' (experiment was flawed) or 'claim_withdrawn'."""
     if status not in ("explained", "claim_withdrawn"):
@@ -135,14 +136,14 @@ def close_contradiction(contradiction_id: int, status: str) -> str:
 
 
 # ---------------------------------------------------------------- red team
-@mcp.tool()
+@tool(mcp)
 def red_team_targets(limit: int = 10) -> list:
     """Claims most worth attacking: confident, influential, under-tested. Each comes with
     the strongest rival label and the scenario context that best separates them."""
     return adv.attack_targets(_ledger, limit)
 
 
-@mcp.tool()
+@tool(mcp)
 def place_attack(claim_bet: int, scenario: str, rival: str, expect: str, prob: float,
                  source: str = "adversary") -> dict:
     """Bet against a claim: rival label + what the rival predicts ('hit'/'miss') in a
@@ -150,19 +151,19 @@ def place_attack(claim_bet: int, scenario: str, rival: str, expect: str, prob: f
     return adv.place_attack(_ledger, claim_bet, scenario, rival, expect, prob, source)
 
 
-@mcp.tool()
+@tool(mcp)
 def adversary_report(source: str = "adversary") -> dict:
     """How many claims the red team attacked, refuted and upheld, plus its calibration."""
     return adv.adversary_report(_ledger, source)
 
 
-@mcp.tool()
+@tool(mcp)
 def blind_view(func: int) -> dict:
     """A function's code and structure with no beliefs, claims or inherited names."""
     return adv.blind_view(_ledger, func)
 
 
-@mcp.tool()
+@tool(mcp)
 def similar_functions(func: int, k: int = 10, model: str = "asm-ngram-v1") -> list:
     """Functions most like ``func``: by instruction patterns (model asm-ngram-v1), by
     position in the call graph (callgraph-spectral-v1: functions that call each other or
@@ -173,32 +174,32 @@ def similar_functions(func: int, k: int = 10, model: str = "asm-ngram-v1") -> li
     return embed.similar(_con, func, model, k)
 
 
-@mcp.tool()
+@tool(mcp)
 def record_blind_label(func: int, label: str, confidence: float, source: str) -> int:
     """Record a label made from blind_view only. Use a distinct source, e.g. 'ai:blind'."""
     return adv.record_blind(_ledger, func, label, confidence, source)
 
 
-@mcp.tool()
+@tool(mcp)
 def reveal_blind(func: int) -> list:
     """Compare blind labels with other claims; disagreements come with a deciding test."""
     return adv.reveal(_ledger, func)
 
 
-@mcp.tool()
+@tool(mcp)
 def record_call(func: int, label: str, confidence: float, source: str = "human", domain: str | None = None) -> dict:
     """An expert (the human, or the AI as 'ai:<model>') asserts a label with a confidence."""
     return _ledger.call(func, label, confidence, source, domain)
 
 
-@mcp.tool()
+@tool(mcp)
 def calibration(source: str) -> dict:
     """Calibration of a source: Brier, overconfidence (said vs. was right), a confidence
     curve and reliability per domain. Try source='human' to audit yourself."""
     return _ledger.calibration(source)
 
 
-@mcp.tool()
+@tool(mcp)
 def segment_of(func: int) -> dict | None:
     """Which recovered source-file segment a function belongs to."""
     row = _con.execute("SELECT ord FROM functions WHERE num=?", (func,)).fetchone()
@@ -209,20 +210,20 @@ def segment_of(func: int) -> dict | None:
 
 
 # ---------------------------------------------------------------- unknowns: behaviour, knockouts, labels
-@mcp.tool()
+@tool(mcp)
 def register_scenario(name: str, tags: list[str], notes: str = "") -> str:
     """Describe a save state with tags (e.g. near_planet, atmosphere, altitude_low, docked).
     Scenarios differing by one tag become controlled experiments."""
     behavior.register_scenario(_ledger, name, tags, notes); return f"registered {name}"
 
 
-@mcp.tool()
+@tool(mcp)
 def list_scenarios() -> dict:
     """All registered save-state scenarios and their tags."""
     return {k: sorted(v) for k, v in behavior.scenarios(_ledger).items()}
 
 
-@mcp.tool()
+@tool(mcp)
 def fingerprint(func: int) -> dict:
     """What a function does without knowing what it is: activity state per scenario,
     which single tags flip it on/off, and the next contrast runs worth doing."""
@@ -231,20 +232,20 @@ def fingerprint(func: int) -> dict:
             "suggested_contrasts": behavior.suggest_contrasts(_ledger, func)}
 
 
-@mcp.tool()
+@tool(mcp)
 def similar_behaviour(func: int, k: int = 10) -> list:
     """Functions whose behavioural profile matches this one's. (Renamed from a second
     `similar_functions`, which clashed with the embedding search tool of that name.)"""
     return behavior.similar(_ledger, func, k)
 
 
-@mcp.tool()
+@tool(mcp)
 def behaviour_groups(threshold: float = 0.85) -> dict:
     """Clusters of functions that behave alike: subsystems discovered before they're named."""
     return behavior.behaviour_groups(_ledger, threshold)
 
 
-@mcp.tool()
+@tool(mcp)
 def graph_votes(k: int = 10) -> dict:
     """Re-derive static label evidence from call-graph structure: the labels of each
     function's nearest neighbours in the call-graph basis, and which labels its labelled
@@ -254,7 +255,7 @@ def graph_votes(k: int = 10) -> dict:
     return graph.vote_all(_ledger, k)
 
 
-@mcp.tool()
+@tool(mcp)
 def quotient_outliers() -> list:
     """Calls between two labels that no other labelled call supports: each one is a
     mislabel or a real cross-layer call. Candidates for review, not verdicts."""
@@ -262,14 +263,14 @@ def quotient_outliers() -> list:
     return graph.outliers(_ledger)
 
 
-@mcp.tool()
+@tool(mcp)
 def propagate_labels() -> dict:
     """Re-derive label evidence for every caller from its callees' labels (and inherited
     name families, weakly). Idempotent; never settles claims."""
     return prop.propagate_all(_ledger)
 
 
-@mcp.tool()
+@tool(mcp)
 def run_knockout(scenario: str, func: int, keys: list[str] | None = None, settle_ms: int = 1500) -> dict:
     """Disable a function (patch entry to RET) and compare screenshots against two baselines.
     Returns health (ok/crashed/frozen), changed-pixel fraction, bbox and image paths.
@@ -278,7 +279,7 @@ def run_knockout(scenario: str, func: int, keys: list[str] | None = None, settle
                        os.environ.get("FFELAB_KNOCKOUT_DIR", "knockouts"))
 
 
-@mcp.tool()
+@tool(mcp)
 def record_knockout_observation(experiment_id: int, func: int, path: str, confidence: float,
                                 description: str, source: str) -> dict:
     """What vanished or changed in a knockout, as a label path (e.g.
@@ -286,13 +287,13 @@ def record_knockout_observation(experiment_id: int, func: int, path: str, confid
     return ko.record_observation(_ledger, experiment_id, func, path, confidence, description, source)
 
 
-@mcp.tool()
+@tool(mcp)
 def vocabulary(under: str | None = None) -> list:
     """The label tree discovered so far, with how many functions carry each path."""
     return lbl.vocabulary(_con, under)
 
 
-@mcp.tool()
+@tool(mcp)
 def function_labels(func: int) -> dict:
     """Every label path recorded for a function, and the most specific trusted one."""
     rows = [dict(r) for r in _con.execute("SELECT * FROM func_labels WHERE func=? ORDER BY id", (func,))]
