@@ -6,6 +6,10 @@ Evidence-driven, agent-assisted reverse engineering of **Frontier: First Encount
 > How to use it day to day, in order: **[docs/USAGE.md](docs/USAGE.md)**.
 > Why things are the way they are: **[docs/DECISIONS.md](docs/DECISIONS.md)**.
 > What's next: **[docs/PLAN.md](docs/PLAN.md)**.
+> Game art (bitmaps, meshes): **[docs/ASSET_FORMATS.md](docs/ASSET_FORMATS.md)**.
+> Running the game in QEMU: **[docs/EMULATOR.md](docs/EMULATOR.md)**.
+> Static research by an outside agent (Muse): **[docs/STATIC_RESEARCH.md](docs/STATIC_RESEARCH.md)**.
+> Frontier: Elite II as a reference: **[docs/REFERENCES.md](docs/REFERENCES.md)**.
 
 FFE's x86 asm (from the [ffed3d](https://github.com/corpsofengineers/ffed3d)
 repo) has ~1,600 functions, most without meaningful names. ffelab:
@@ -43,14 +47,20 @@ FFED3D_DIR=../ffed3d python -m pytest       # also runs the real-data test
 | `ffelab exe-check EXE [--map]` | Check an exe against the asm's layout; store a per-binary address map (identity, or aligned by content for other builds) |
 | `ffelab export --src DIR [--auto]` | Write confirmed names into a copy of `ffe.asm` as alias labels, plus a reviewable diff |
 | `ffelab uncertain` | The most uncertain functions, where the agent should look next |
+| `ffelab emu calibrate --exe EXE` / `ffelab emu monitor CMD` | Find `code_base` in the running game and print `FFELAB_EMU`; send one QEMU monitor command (see `docs/EMULATOR.md`) |
+| `ffelab scenario save / tag / list` | Save a QEMU snapshot and tag it as a scenario in one go; retag; list scenarios and whether each snapshot exists |
+| `ffelab research view / refs / grep / claim / import / retag` | Static research for an outside agent: read freely, write claims only (see `docs/STATIC_RESEARCH.md`) |
+| `ffelab ref import --fe2 fe2.s --src DIR` / `ffelab ref show [FUNC]` | Match FFE functions to Frontier: Elite II (glFrontier's `fe2.s`); reference facts, not evidence (see `docs/REFERENCES.md`) |
 | `ffelab embed` / `ffelab similar FUNC` | Embed every function's normalised code (and scenario fingerprints); list the functions most like one |
 | `ffelab graph build / vote / outliers / check` | Call-graph structure: call layers, a spectral basis searchable with `ffelab similar --model callgraph-spectral-v1`, and static label votes from neighbours and the label quotient (see `docs/GRAPH.md`) |
-| `ffelab db copy --from ffe.db --to postgresql:///ffelab` | Move the whole store to Postgres (or back to a file) |
+| `ffelab db copy --from ffe.db --to postgresql:///ffelab` | Move a whole store into an empty one: SQLite to Postgres (or back). Then `ffelab embed` and `ffelab graph build`; see GETTING_STARTED 4.4 |
 | `ffelab eval run / gate / compare / export` | Score the blind labeller and red team against experiment-confirmed labels; gate prompt changes on it (see `docs/EVALS.md`) |
 | `ffelab agents run [--worker claude\|heuristic] [--trace phoenix]` | Run the orchestrator: blind labeller and red team workers under a budget, every step traced (see `docs/ORCHESTRATOR.md`) |
 | `ffelab agents questions / answer / dismiss` | The batched questions the agents and open contradictions have queued for you |
 | `python -m ffelab.workflows worker / start / status / pause / resume / stop` | Durable experiment campaigns on Temporal: a crash or hang retries from the save state (see GETTING_STARTED "Long runs") |
 | `python -m ffelab.mcp_server` | The MCP server agents use |
+| `python -m ffelab.mcp_research` | A claims-only MCP server for an outside researcher (read tools plus `claim`) |
+| `python3 tools/meshwalk.py all --src DIR` | Dump the game's meshes as OBJ files (stdlib only; see `docs/ASSET_FORMATS.md`) |
 
 ## Modules
 
@@ -71,7 +81,9 @@ FFED3D_DIR=../ffed3d python -m pytest       # also runs the real-data test
 | `adversary.py` | Red team (attack targets, rival labels, attack bets) and blind second opinions |
 | `exe.py` | Executable check and content-based address mapping between builds |
 | `export.py` | Confirmed names → alias labels in a copy of the asm |
-| `harness/` | `GameBackend` interface, `FakeBackend`, `EmulatorBackend` (QEMU / DOSBox-X), GDB client |
+| `research.py`, `mcp_research.py` | Static research: read views and claims-only writes, as CLI and as an MCP server |
+| `fe2ref.py` | Matches against Frontier: Elite II's `fe2.s` (data tables, constants, call graph) into `ref_matches` |
+| `harness/` | `GameBackend` interface, `FakeBackend`, `EmulatorBackend` (QEMU / DOSBox-X), GDB client, `bringup.py` (code_base calibration, monitor, snapshots) |
 | `mcp_server.py` | The agent tool surface |
 | `orchestrator/` | The agent loop as a program: Agent SDK workers, budgets and stop conditions, question queue, OpenTelemetry tracing |
 | `workflows/` | Temporal campaigns: the campaign workflow, retry-safe experiment activities, the command line |
@@ -124,15 +136,18 @@ See `docs/MODULE_MAP.md` for the full table.
 as `postgresql:///ffelab`, so several agents can share one ledger; see
 GETTING_STARTED 4.4.
 
-For the real game set `FFELAB_BACKEND` to `qemu` or `dosbox-x` and `FFELAB_EMU`
-to a JSON `EmulatorConfig`, e.g. `{"binary": "<id from exe-check>", "code_base": 0, "gdb_port": 1234}`.
+For the real game set `FFELAB_BACKEND` to `qemu` and `FFELAB_EMU` to a JSON
+`EmulatorConfig`, e.g. `{"binary": "<id from exe-check>", "code_base": 0, "gdb_port": 1234}`;
+`ffelab emu calibrate` prints yours. Setup on the Mac: [docs/EMULATOR.md](docs/EMULATOR.md).
+(`dosbox-x` exists as a backend but needs a DOSBox-X build with a GDB stub.)
 
 ## Status
 
 - Working: static map, ledger, adversarial layer, fingerprints, propagation,
   knockouts, exe-check, export, Pydantic models, eval harness with a gate,
   Postgres + pgvector beside SQLite, Agent SDK orchestrator with tracing,
-  Temporal campaigns, call-graph structure. Unit-tested against fakes (storage
+  Temporal campaigns, call-graph structure, asset formats (bitmaps, meshes;
+  `docs/ASSET_FORMATS.md`). Unit-tested against fakes (storage
   tests also on Postgres) plus one real-data test.
 - Optional servers (Postgres, Temporal, Phoenix) run in Docker:
   [docs/DOCKER.md](docs/DOCKER.md).

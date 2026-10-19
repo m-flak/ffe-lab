@@ -22,7 +22,7 @@ install → build ffe.db → exe-check FIRSTENC.EXE → emulator bring-up → da
 | piece | needed? | use it when |
 |---|---|---|
 | `ffelab build`, ledger, MCP tools, Claude Code | **required** | always: this is the core |
-| `exe-check` + emulator (QEMU or DOSBox-X) | **required** for anything beyond static work | before your first experiment |
+| `exe-check` + emulator (QEMU) | **required** for anything beyond static work | before your first experiment |
 | SQLite (`ffe.db`) | default | you plus one agent at a time |
 | Postgres + pgvector | optional | several agents writing at once, or you want `ffelab similar` in the database (it also works on SQLite) |
 | Orchestrator, `ffelab agents run` | optional | you want agents to work unattended under a dollar/time budget instead of chatting in Claude Code |
@@ -75,7 +75,8 @@ the most similar call neighbourhoods. Details: `docs/GRAPH.md`.
 Then connect Claude Code through `.mcp.json` with `FFELAB_BACKEND=fake`
 (GETTING_STARTED 4.3). You can already do static work: read blind views, make
 calls, run propagation. **You:** record what you already know, with honest
-confidences.
+confidences. An outside researcher such as Muse does this phase through
+`ffelab research` and records claims only; its brief is `docs/STATIC_RESEARCH.md`.
 
 ## 3. Check your game binary (do this first, before any emulator work)
 
@@ -95,13 +96,17 @@ below is trustworthy on the wrong build.
 This is the step that has never run for real, so expect fiddling
 (PLAN "Emulator bring-up", GETTING_STARTED Stage 2):
 
-1. Run FFE in QEMU + FreeDOS or DOSBox-X.
-2. Calibrate `code_base`: at `code_base + Pos` of a known framed function you
-   must see `55 8B EC` or `55 89 E5`.
+Step-by-step Mac setup (QEMU + FreeDOS, code_base calibration, tagged save states): see [docs/EMULATOR.md](docs/EMULATOR.md).
+
+1. Run FFE in QEMU + FreeDOS (stock DOSBox-X has no debugger port, so ffelab
+   can't drive it yet).
+2. Calibrate `code_base`: `ffelab emu calibrate --exe FIRSTENC.EXE --binary <binary_id>`
+   prints the `FFELAB_EMU` line.
 3. Switch `.mcp.json` to `"FFELAB_BACKEND": "qemu"` and set `FFELAB_EMU`, e.g.
    `{"binary": "<binary_id>", "code_base": <n>, "gdb_port": 1234, "monitor_port": 4444}`.
-4. Make and register 10–15 save states with tags, planned in pairs that differ
-   by one tag.
+4. Make 10–15 save states, planned in pairs that differ by one tag:
+   `ffelab scenario save NAME --tags a,b` saves and tags each one;
+   `ffelab scenario list` checks them.
 5. Ask Claude Code for one logging pass and one knockout. If they work, you're live.
 
 **You:** play the game to the save points; the agents can't make the first
@@ -133,12 +138,18 @@ without you:
 
 ```bash
 pip install -e ".[orchestrator]"
-ffelab agents run --worker heuristic --rounds 2           # free dry run first
+ffelab agents run --worker heuristic --rounds 2 --db scratch.db   # free dry run, on a throwaway copy
+ffelab agents run --attacks 0 --max-usd 2                 # static only: blind labels, no experiments
 ffelab agents run --backend qemu --max-usd 2 --trace phoenix --out reports/run1.json
 ```
 
 `--trace phoenix` needs Phoenix running (Docker `tracing` profile, step 5);
 the traces show up at http://localhost:6006. Leave the flag off to skip tracing.
+
+**Careful:** `--backend` defaults to `fake`, and the red team's attacks run
+logging passes on it. Against your real ledger that records made-up
+experiments and resolves bets with them. Until the emulator works, use
+`--attacks 0` or a scratch copy of the ledger.
 
 It uses `FFELAB_EMU` for the emulator, and `ANTHROPIC_API_KEY` or your
 logged-in Claude Code for the model. It stops on budget, on no progress, or when
@@ -190,10 +201,19 @@ Switch when you run several agents at once (for example the orchestrator and a
 Temporal worker together). Otherwise stay on SQLite.
 
 ```bash
-pip install -e ".[pg]"                       # server: Docker `pg` profile (step 5)
-ffelab db copy --from ffe.db --to "$FFELAB_DB"
-ffelab embed && ffelab similar 688
+pip install -e ".[pg]"                           # server: Docker `pg` profile (step 5)
+ffelab db copy --from ffe.db --to "$FFELAB_DB"   # into an empty database; ids kept
+ffelab embed                                     # vectors aren't copied; rebuild them
+ffelab graph build                               # refresh call layers + call-graph basis
+ffelab research retag ai:lut-analysis ai:muse    # Muse's file only: one source name for Muse
+ffelab similar 688                               # check: search answers from Postgres
 ```
+
+The same steps import an `ffe.db` made elsewhere, such as the one from the
+Muse asset research: its claims arrive as open claims under their original
+sources, never as settled labels. The copy refuses a non-empty database and
+does not merge two ledgers; GETTING_STARTED 4.4 has the caveats and how to
+start over.
 
 Put the same `FFELAB_DB` URL in `.mcp.json` for Claude Code. (Installing
 Postgres with Homebrew instead is in GETTING_STARTED 4.4.)

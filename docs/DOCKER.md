@@ -1,6 +1,6 @@
 # Running the backing services in Docker
 
-The stack PRs add three servers: Postgres with pgvector (shared ledger and
+ffelab can use three servers: Postgres with pgvector (shared ledger and
 similarity search), a Temporal dev server (durable campaigns) and Arize
 Phoenix (traces of agent runs). `docker-compose.yml` runs all three, so none
 of them has to be installed on the Mac. Each one is optional. SQLite lite
@@ -61,8 +61,14 @@ With `COMPOSE_PROFILES` empty, `docker compose up` starts nothing.
 ```bash
 pip install -e '.[pg]'
 ffelab db copy --from ffe.db --to "$FFELAB_DB"    # move the existing ledger, ids kept
-ffelab build ...                                  # every command now uses Postgres
+ffelab embed                                      # vectors aren't copied; rebuild them
+ffelab graph build                                # refresh the call-graph basis
 ```
+
+After that every command uses Postgres. The copy needs an empty database; to
+start over, `docker compose exec postgres dropdb -U ffelab --force ffelab` and
+`docker compose exec postgres createdb -U ffelab ffelab` (this keeps Temporal's
+and Phoenix's data, unlike `down -v`). GETTING_STARTED 4.4 has the rest.
 
 The URL is `postgresql://ffelab:ffelab@localhost:5432/ffelab`. The pgvector
 extension is already created, and a second database `ffelab_test` exists for

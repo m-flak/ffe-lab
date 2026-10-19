@@ -1,7 +1,8 @@
 # Plan
 
-Status as of v0.5: the AI-engineering stack (items 1–4 below) and the call-graph
-structure are built. The next real step is emulator bring-up. Ordered by when
+Status as of v0.5: the AI-engineering stack (items 1–4 below), the call-graph
+structure and the asset-format decoding are built. The next real step is
+emulator bring-up. Ordered by when
 things should happen.
 
 ---
@@ -20,6 +21,7 @@ things should happen.
 | v0.5 | Durable experiment campaigns on Temporal (`python -m ffelab.workflows`) |
 | v0.5 | Call-graph structure (`ffelab graph`): spectral basis, call layers, label quotient |
 | v0.5 | Docker Compose for the optional servers (`docs/DOCKER.md`); day-to-day guide (`docs/USAGE.md`) |
+| v0.5 | Asset formats: bitmap table and mesh display lists decoded, `tools/meshwalk.py` dumps OBJs (`docs/ASSET_FORMATS.md`); unverified against the running game |
 
 ---
 
@@ -65,6 +67,8 @@ solves a real problem in ffelab. Keep SQLite as a zero-setup "lite mode".
   belief updates are locked per function; experiments take an optional unique
   `run_key` for item 4. The blind labeller and red team have `similar_functions`
   in their agent files (added with D16, at Matthew's request, before measuring).
+  An `ffe.db` made elsewhere imports with the same `ffelab db copy` (GETTING_STARTED 4.4);
+  copying into a non-empty store, i.e. merging two ledgers, isn't supported.
   Remaining: once experiments settle enough labels, `ffelab eval compare` the
   agents with and without it, and drop it if it doesn't help.
 - **Call-graph structure: built** (D16, `docs/GRAPH.md`). `ffelab graph` adds a
@@ -93,6 +97,19 @@ solves a real problem in ffelab. Keep SQLite as a zero-setup "lite mode".
 
 ---
 
+## Static-first phase (now, until the emulator runs)
+
+- An outside researcher (Muse) works from code and data alone through
+  `ffelab research` (view / refs / grep to read; claim / import to write) under
+  one source name, `ai:muse`. It makes claims only; experiments settle them
+  later. Protocol: `docs/STATIC_RESEARCH.md`.
+- Muse's first `ffe.db` imports with `ffelab db copy`, then
+  `ffelab research retag ai:lut-analysis ai:muse` (GETTING_STARTED 4.4).
+- Later: a `static-researcher` worker under `ffelab agents run`, with the same
+  brief and the same claims-only tools.
+
+---
+
 ## Emulator bring-up (in parallel with the above)
 
 Which binary, and why: see `DECISIONS.md` (D6). Short version: original DOS
@@ -101,10 +118,12 @@ Windows VM optionally for game logic.
 
 1. Download the game, run `ffelab exe-check FIRSTENC.EXE`. Same build: identity
    map. Different: aligned map, check `suspected_changed`.
-2. QEMU + FreeDOS (most scriptable) or DOSBox-X (most compatible).
-3. Calibrate `code_base`: bytes at `code_base + Pos` of a known framed function
-   must be `55 8B EC` or `55 89 E5`.
-4. Build and tag the save-state library (starter set in `GETTING_STARTED.md`).
+2. QEMU + FreeDOS (DOSBox-X only if QEMU can't run FFE: it needs a debugger
+   port first). Step by step: `docs/EMULATOR.md`.
+3. Calibrate `code_base` with `ffelab emu calibrate` (it checks for
+   `55 8B EC` / `55 89 E5` at `code_base + Pos` of known framed functions).
+4. Build and tag the save-state library with `ffelab scenario save`
+   (starter set in `docs/EMULATOR.md` step 9).
 5. First real logging pass, knockout, and red-team round; fix what breaks.
 
 Optional: a **built-FFED3D backend** (linker map for exact symbols, compile-time
@@ -113,6 +132,13 @@ hit counters instead of breakpoints, knockouts as source edits). Windows VM only
 ---
 
 ## Later
+
+**Assets**
+- Check the mesh dumps against what the game renders; decode the remaining
+  opcodes (`0x05` complex polygons, sub-objects, set color, text).
+- Recover the runtime palette; settle `FUNC_001805`/`FUNC_001807` (open
+  `render/texture/palette` claims from the LUT analysis) with a knockout once
+  the emulator runs.
 
 **Static map**
 - More boundary features: DATA ownership, string-literal locality, local-vs-exported call ratio.
