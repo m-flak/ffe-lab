@@ -22,7 +22,7 @@ install → build ffe.db → exe-check FIRSTENC.EXE → emulator bring-up → da
 | piece | needed? | use it when |
 |---|---|---|
 | `ffelab build`, ledger, MCP tools, Claude Code | **required** | always: this is the core |
-| `exe-check` + emulator (QEMU or DOSBox-X) | **required** for anything beyond static work | before your first experiment |
+| `exe-check` + emulator (QEMU) | **required** for anything beyond static work | before your first experiment |
 | SQLite (`ffe.db`) | default | you plus one agent at a time |
 | Postgres + pgvector | optional | several agents writing at once, or you want `ffelab similar` in the database (it also works on SQLite) |
 | Orchestrator, `ffelab agents run` | optional | you want agents to work unattended under a dollar/time budget instead of chatting in Claude Code |
@@ -96,13 +96,17 @@ below is trustworthy on the wrong build.
 This is the step that has never run for real, so expect fiddling
 (PLAN "Emulator bring-up", GETTING_STARTED Stage 2):
 
-1. Run FFE in QEMU + FreeDOS or DOSBox-X.
-2. Calibrate `code_base`: at `code_base + Pos` of a known framed function you
-   must see `55 8B EC` or `55 89 E5`.
+Step-by-step Mac setup (QEMU + FreeDOS, code_base calibration, tagged save states): see [docs/EMULATOR.md](docs/EMULATOR.md).
+
+1. Run FFE in QEMU + FreeDOS (stock DOSBox-X has no debugger port, so ffelab
+   can't drive it yet).
+2. Calibrate `code_base`: `ffelab emu calibrate --exe FIRSTENC.EXE --binary <binary_id>`
+   prints the `FFELAB_EMU` line.
 3. Switch `.mcp.json` to `"FFELAB_BACKEND": "qemu"` and set `FFELAB_EMU`, e.g.
    `{"binary": "<binary_id>", "code_base": <n>, "gdb_port": 1234, "monitor_port": 4444}`.
-4. Make and register 10–15 save states with tags, planned in pairs that differ
-   by one tag.
+4. Make 10–15 save states, planned in pairs that differ by one tag:
+   `ffelab scenario save NAME --tags a,b` saves and tags each one;
+   `ffelab scenario list` checks them.
 5. Ask Claude Code for one logging pass and one knockout. If they work, you're live.
 
 **You:** play the game to the save points; the agents can't make the first

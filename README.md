@@ -126,8 +126,10 @@ See `docs/MODULE_MAP.md` for the full table.
 as `postgresql:///ffelab`, so several agents can share one ledger; see
 GETTING_STARTED 4.4.
 
-For the real game set `FFELAB_BACKEND` to `qemu` or `dosbox-x` and `FFELAB_EMU`
-to a JSON `EmulatorConfig`, e.g. `{"binary": "<id from exe-check>", "code_base": 0, "gdb_port": 1234}`.
+For the real game set `FFELAB_BACKEND` to `qemu` and `FFELAB_EMU` to a JSON
+`EmulatorConfig`, e.g. `{"binary": "<id from exe-check>", "code_base": 0, "gdb_port": 1234}`;
+`ffelab emu calibrate` prints yours. Setup on the Mac: [docs/EMULATOR.md](docs/EMULATOR.md).
+(`dosbox-x` exists as a backend but needs a DOSBox-X build with a GDB stub.)
 
 ## Status
 

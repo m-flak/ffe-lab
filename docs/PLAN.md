@@ -118,10 +118,12 @@ Windows VM optionally for game logic.
 
 1. Download the game, run `ffelab exe-check FIRSTENC.EXE`. Same build: identity
    map. Different: aligned map, check `suspected_changed`.
-2. QEMU + FreeDOS (most scriptable) or DOSBox-X (most compatible).
-3. Calibrate `code_base`: bytes at `code_base + Pos` of a known framed function
-   must be `55 8B EC` or `55 89 E5`.
-4. Build and tag the save-state library (starter set in `GETTING_STARTED.md`).
+2. QEMU + FreeDOS (DOSBox-X only if QEMU can't run FFE: it needs a debugger
+   port first). Step by step: `docs/EMULATOR.md`.
+3. Calibrate `code_base` with `ffelab emu calibrate` (it checks for
+   `55 8B EC` / `55 89 E5` at `code_base + Pos` of known framed functions).
+4. Build and tag the save-state library with `ffelab scenario save`
+   (starter set in `docs/EMULATOR.md` step 9).
 5. First real logging pass, knockout, and red-team round; fix what breaks.
 
 Optional: a **built-FFED3D backend** (linker map for exact symbols, compile-time

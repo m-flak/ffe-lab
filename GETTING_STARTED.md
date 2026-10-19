@@ -306,19 +306,25 @@ This is the part that hasn't been tested against a real game yet. Expect fiddlin
    Note the `binary_id` it prints; you'll put it in `FFELAB_EMU` in step 3.
    Why the original game rather than your built FFED3D: see `docs/DECISIONS.md` (D6).
 
-1. **Run your copy of FFE in an emulator on the Mac.**
-   - *QEMU + FreeDOS*: most scriptable (built-in debugger port, save states, key input).
-   - *DOSBox-X*: most compatible with old games; debugging depends on your build.
-2. **Calibrate the address offset** (`code_base`). See `docs/PLAN.md`, "Emulator bring-up".
-   In short: halt anywhere, check that the bytes at `code_base + Pos` for a known
-   function start with `55 89 E5` or `55 8B EC` (`push ebp; mov ebp,esp`).
-3. **Switch the backend** in `.mcp.json`: `"FFELAB_BACKEND": "qemu"` (or
-   `"dosbox-x"`), plus `"FFELAB_EMU"` with your config, e.g.
-   `"{\"binary\": \"<binary_id>\", \"code_base\": 12345678, \"gdb_port\": 1234, \"monitor_port\": 4444}"`.
-4. **Build the save-state library** — about 10–15 situations, each registered
-   with tags:
+1. **Run your copy of FFE in QEMU + FreeDOS on the Mac.** QEMU is the only
+   emulator ffelab can drive end to end today: stock DOSBox-X has no debugger
+   port. Step-by-step Mac setup (QEMU + FreeDOS, code_base calibration, tagged save states): see [docs/EMULATOR.md](docs/EMULATOR.md).
+2. **Calibrate the address offset** (`code_base`): with the game running,
+   `ffelab emu calibrate --exe /path/to/FIRSTENC.EXE --binary <binary_id>`.
+   It finds the code in memory, checks that functions start with
+   `push ebp; mov ebp,esp` at `code_base + Pos`, and prints your `FFELAB_EMU` line.
+3. **Switch the backend** in `.mcp.json`: `"FFELAB_BACKEND": "qemu"`, plus
+   `"FFELAB_EMU"` with the line calibrate printed, e.g.
+   `"{\"binary\": \"<binary_id>\", \"code_base\": 1048576, \"gdb_port\": 1234, \"monitor_port\": 4444}"`.
+4. **Build the save-state library**: about 10–15 situations. Play to each one,
+   then save and tag it in one go:
 
-   > "Register scenario orbit_atmo with tags near_planet, atmosphere, altitude_high."
+   ```bash
+   ffelab scenario save orbit_atmo --tags near_planet,atmosphere,altitude_high
+   ffelab scenario list                      # tags, and whether QEMU has the snapshot
+   ```
+
+   (`ffelab scenario tag NAME --tags ...` retags without saving.)
 
    **Plan pairs that differ by one tag** (atmosphere vs. airless, high vs. low
    altitude, day vs. night side). Those pairs are controlled experiments and are
