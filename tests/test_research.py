@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -93,3 +94,24 @@ class TestClaims(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestResearchMCP(unittest.TestCase):
+    def test_toolset_is_read_plus_claim(self):
+        try:
+            import mcp  # noqa: F401
+        except ImportError:
+            self.skipTest("mcp not installed")
+        import asyncio
+        import importlib
+        d = tempfile.mkdtemp()
+        os.environ.update(FFELAB_DB=os.path.join(d, "r.db"), FFELAB_SOURCE="ai:muse")
+        try:
+            srv = importlib.import_module("ffelab.mcp_research")
+        finally:
+            del os.environ["FFELAB_SOURCE"]
+        names = {t.name for t in asyncio.run(srv.mcp.list_tools())}
+        self.assertIn("claim", names)
+        self.assertFalse(names & {"place_bet", "resolve_bet", "settle_claims", "record_call",
+                                  "run_logging_pass", "run_halt", "close_contradiction"})
+        self.assertIn("refused", srv.claim("1", "render", 0.7, "x"))     # no such function: a clean refusal

@@ -16,6 +16,31 @@ Overconfidence costs you; so does hedging everything at 0.5.
 
 ## Setup
 
+Two ways in, same rules. Use MCP if the agent's client supports MCP servers;
+use the CLI if it only has a shell.
+
+**MCP** (`ffelab.mcp_research`: read tools plus `claim`, nothing else). In the
+client's MCP config, with full paths:
+
+```json
+{
+  "mcpServers": {
+    "ffelab-research": {
+      "command": "/full/path/to/ffe-lab/.venv/bin/python",
+      "args": ["-m", "ffelab.mcp_research"],
+      "env": {"FFELAB_DB": "postgresql:///ffelab", "FFELAB_SOURCE": "ai:muse"}
+    }
+  }
+}
+```
+
+The source is fixed in that config, so the agent can't claim under another
+name. Tools: `view`, `data_refs`, `grep_asm`, `uncertain`, `similar_functions`,
+`quotient_outliers`, `vocabulary`, `my_claims`, `claim`. Don't give a
+researcher the full `ffelab.mcp_server`: it has the experiment and bet tools.
+
+**CLI:**
+
 ```bash
 export FFELAB_DB=postgresql:///ffelab      # or a path to ffe.db
 export FFELAB_SOURCE=ai:muse               # your source name; never change it
@@ -26,6 +51,8 @@ One researcher, one source name. Put the topic in the basis, not in the source
 starts a new, empty record.
 
 ## Read (anything)
+
+CLI commands below; the MCP tools of the same purpose take the same arguments.
 
 | command | what you get |
 |---|---|
@@ -79,8 +106,7 @@ lower. Static reasoning alone rarely deserves more than 0.95.
 - Write to the database any other way (no SQL, no `ffelab build` on a store
   that holds work, no fresh `ffe.db` of your own). If the store looks wrong,
   stop and tell the human.
-- Use the MCP server's experiment tools (`run_*`, `place_bet`, `resolve_bet`,
-  `settle_claims`, `record_call` under another source).
+- Connect to the full `ffelab.mcp_server` (experiment and bet tools).
 
 ## Where to look first
 
