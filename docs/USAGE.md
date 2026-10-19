@@ -133,12 +133,18 @@ without you:
 
 ```bash
 pip install -e ".[orchestrator]"
-ffelab agents run --worker heuristic --rounds 2           # free dry run first
+ffelab agents run --worker heuristic --rounds 2 --db scratch.db   # free dry run, on a throwaway copy
+ffelab agents run --attacks 0 --max-usd 2                 # static only: blind labels, no experiments
 ffelab agents run --backend qemu --max-usd 2 --trace phoenix --out reports/run1.json
 ```
 
 `--trace phoenix` needs Phoenix running (Docker `tracing` profile, step 5);
 the traces show up at http://localhost:6006. Leave the flag off to skip tracing.
+
+**Careful:** `--backend` defaults to `fake`, and the red team's attacks run
+logging passes on it. Against your real ledger that records made-up
+experiments and resolves bets with them. Until the emulator works, use
+`--attacks 0` or a scratch copy of the ledger.
 
 It uses `FFELAB_EMU` for the emulator, and `ANTHROPIC_API_KEY` or your
 logged-in Claude Code for the model. It stops on budget, on no progress, or when

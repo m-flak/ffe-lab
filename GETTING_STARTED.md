@@ -428,6 +428,11 @@ Built, each with its own page:
 - **Unattended agent runs** (`ffelab agents run`): the blind labeller and red
   team as workers under a dollar/time budget, every step traced, and a batched
   question queue for you (`ffelab agents questions`). `docs/ORCHESTRATOR.md`.
+  Until the emulator works, run it static-only: `ffelab agents run --attacks 0`.
+  **Warning:** the red team's attacks run real logging passes on `--backend`,
+  which defaults to `fake`. Against your real ledger, attacks on the fake
+  backend record made-up experiments and resolve bets with them. Use
+  `--attacks 0`, or point `--db` at a scratch copy, until `--backend qemu` works.
 - **Evals** (`ffelab eval`): score the agents by a number before keeping a
   prompt or model change. `docs/EVALS.md`.
 - **Postgres + vector search** (4.4), **Temporal campaigns** ("Long runs"
