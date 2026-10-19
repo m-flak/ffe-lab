@@ -114,4 +114,4 @@ class TestResearchMCP(unittest.TestCase):
         self.assertIn("claim", names)
         self.assertFalse(names & {"place_bet", "resolve_bet", "settle_claims", "record_call",
                                   "run_logging_pass", "run_halt", "close_contradiction"})
-        self.assertIn("refused", srv.claim("1", "render", 0.7, "x"))     # no such function: a clean refusal
+        self.assertIn("refused", asyncio.run(srv.claim("1", "render", 0.7, "x")))     # no such function: a clean refusal
