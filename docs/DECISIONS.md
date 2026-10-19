@@ -192,6 +192,20 @@ structure only. The label vote uses others' labels and stays out of its view.
 (their source reliability drops; retune or drop the factors), or a learned
 model (PLAN "Later": node classification) beats them on the same hold-out.
 
+### D17. Frontier: Elite II (glFrontier's fe2.s) as a reference, not evidence
+glFrontier compiles `fe2.s`, Tom Morton's labelled disassembly of the Atari ST
+game. FFE reuses FE2's algorithms, constants and tables but not its
+instructions, so `ffelab ref import` matches on shared data tables, distinctive
+constants and the call graph (about 160 functions, 10% of FFE). Matches go to
+`ref_matches` with a confidence by how they were found, not into the ledger:
+FE2 names aren't subsystem labels, and a static match must never settle a bet
+or raise a contradiction. Kept out of `blind_view` (other people's names) and
+never eval gold (D12). `fe2.s` is a disassembly of a copyrighted game and
+glFrontier's licence is unclear, so neither is vendored; the parser is ours.
+*Would change if:* a vetted FE2-name to subsystem map exists (then matches can
+become `static_ref` evidence with its own source reliability), or experiments
+show the matches are worse than the hold-out suggests (lower the confidences).
+
 ---
 
 ## Open questions

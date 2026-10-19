@@ -54,6 +54,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from collections import Counter
 from pathlib import Path
 
 from . import db as dbmod
@@ -155,6 +156,13 @@ def main(argv=None):
     sm.add_argument("--model", default="asm-ngram-v1"); sm.add_argument("-k", type=int, default=10)
     gr = sub.add_parser("graph"); gr.add_argument("graph_cmd", choices=["build", "vote", "outliers", "check"])
     gr.add_argument("--db", default=DEFAULT_DB); gr.add_argument("-k", type=int, default=10)
+    rf = sub.add_parser("ref").add_subparsers(dest="ref_cmd", required=True)
+    ri = rf.add_parser("import", help="match FFE to Frontier: Elite II via glFrontier's fe2.s")
+    ri.add_argument("--fe2", required=True, type=Path, help="fe2.s from a glFrontier fork")
+    ri.add_argument("--src", required=True, type=Path, help="folder with ffe.asm and ffedat.asm")
+    ri.add_argument("--db", default=DEFAULT_DB)
+    rs = rf.add_parser("show"); rs.add_argument("func", type=int, nargs="?")
+    rs.add_argument("--db", default=DEFAULT_DB)
     dbc = sub.add_parser("db").add_subparsers(dest="db_cmd", required=True)
     cp = dbc.add_parser("copy"); cp.add_argument("--from", dest="src", required=True)
     cp.add_argument("--to", dest="dst", required=True)
@@ -252,6 +260,20 @@ def main(argv=None):
         else:
             r = graph.check(Ledger(con), a.k)
         print(json.dumps(r, indent=2))
+    elif a.cmd == "ref":
+        from . import fe2ref
+        con = dbmod.connect(a.db)
+        if a.ref_cmd == "import":
+            m = fe2ref.matcher(a.fe2, a.src)
+            rows = m.run()
+            print(json.dumps({"matched": fe2ref.store(con, rows), "holdout": m.holdout(),
+                              "by_how": dict(Counter(r["how"] for r in rows)),
+                              "with_ref_name": sum(1 for r in rows if r["ref_name"])}, indent=2))
+        else:
+            q = "SELECT * FROM ref_matches" + (" WHERE func=?" if a.func is not None else "") + " ORDER BY func"
+            for r in con.execute(q, () if a.func is None else (a.func,)):
+                print(f"FUNC_{r['func']:06d}  {r['ref']}:{r['ref_label']}  {r['how']}"
+                      f"  csim={r['csim']:.2f}  conf={r['confidence']:.2f}")
     elif a.cmd == "db":
         counts = dbmod.copy(dbmod.connect(a.src), dbmod.connect(a.dst))
         print(json.dumps(counts, indent=2))

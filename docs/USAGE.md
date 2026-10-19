@@ -72,6 +72,19 @@ Their votes are hints, never proof: only experiments settle anything.
 `ffelab similar FUNC --model callgraph-spectral-v1` lists the functions with
 the most similar call neighbourhoods. Details: `docs/GRAPH.md`.
 
+Optional: match FFE against Frontier: Elite II's 68k code. Get `fe2.s` from a
+glFrontier fork (e.g. `crinkelitehttps/glfrontier-extended`, file `fe2/fe2.s`;
+it is not in this repo for copyright reasons), then:
+
+```bash
+ffelab ref import --fe2 ~/re/glfrontier-extended/fe2/fe2.s --src ~/re/ffed3d
+ffelab ref show 1530                  # FUNC_001530  glfrontier:L45900_2RandInts ...
+```
+
+This writes about 160 matches to `ref_matches`. They are reference facts, not
+evidence: they don't touch beliefs or bets. `belief` in the MCP server shows
+them; `blind_view` doesn't. Details: `docs/REFERENCES.md`.
+
 Then connect Claude Code through `.mcp.json` with `FFELAB_BACKEND=fake`
 (GETTING_STARTED 4.3). You can already do static work: read blind views, make
 calls, run propagation. **You:** record what you already know, with honest

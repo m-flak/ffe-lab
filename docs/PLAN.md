@@ -75,8 +75,9 @@ solves a real problem in ffelab. Keep SQLite as a zero-setup "lite mode".
   spectral basis (`callgraph-spectral-v1`, searchable like the other embeddings),
   call layers, and two static evidence kinds (neighbour vote, quotient check).
   Remaining: once experiments settle labels, check the votes' calibration; run
-  the decisive halt in the text-engine cycle; match the maths half against a
-  Frontier: Elite II (68k) disassembly for the authorship question.
+  the decisive halt in the text-engine cycle. The authorship test against
+  Frontier: Elite II is done (`docs/REFERENCES.md`): both halves match FE2 at
+  about 10%, so the split looks like subsystem, not author.
 
 ### 4. Durable experiment campaigns (Temporal, see D11)
 - Long experiment runs as durable workflows: an emulator crash or hang retries
@@ -166,6 +167,15 @@ hit counters instead of breakpoints, knockouts as source edits). Windows VM only
 
 **FFED3D-AJ (Windows VM)**
 - Match AndyJ's binaries against rev16/rev60 builds with symbols; study his additions.
+
+---
+
+## References
+
+- **Frontier: Elite II via glFrontier (D17, `docs/REFERENCES.md`): built.**
+  `ffelab ref import` stores about 160 matches. Next, if wanted: an FE2-name to
+  subsystem map so matches can become `static_ref` evidence; FE2's notes (ship
+  type ids, `FmtStr` codes, module slots 24/28) as hypotheses for halts.
 
 ---
 
