@@ -19,6 +19,16 @@
       (embedding callgraph-spectral-v1); vote = neighbour and quotient label evidence
       (static, never settles anything); outliers = calls between labels nothing else
       supports; check = hold-out accuracy of the votes
+  ffelab emu calibrate --exe FIRSTENC.EXE [--binary ID] [--gdb-port 1234] [--limit-mb 64]
+      with FFE running in QEMU: find code_base (where the code sits in guest memory)
+  ffelab emu monitor "COMMAND" [--monitor-port 4444]
+      run one QEMU monitor command (stop, cont, loadvm NAME, info registers, info snapshots)
+  ffelab scenario save NAME --tags a,b [--notes TEXT] [--monitor-port 4444]
+      save the running game as QEMU snapshot NAME and register it with its tags
+  ffelab scenario tag NAME --tags a,b [--notes TEXT]
+      register (or re-tag) a save state without saving
+  ffelab scenario list [--monitor-port 4444]
+      registered scenarios, and whether QEMU has a snapshot for each
   ffelab db copy --from ffe.db --to postgresql:///ffelab
       copy a whole store into an empty one (SQLite -> Postgres, or back)
   ffelab eval export --db ffe.db [--out evals/datasets]
@@ -163,6 +173,18 @@ def main(argv=None):
     ri.add_argument("--db", default=DEFAULT_DB)
     rs = rf.add_parser("show"); rs.add_argument("func", type=int, nargs="?")
     rs.add_argument("--db", default=DEFAULT_DB)
+    emu = sub.add_parser("emu").add_subparsers(dest="emu_cmd", required=True)
+    ca = emu.add_parser("calibrate"); ca.add_argument("--exe", required=True, type=Path)
+    ca.add_argument("--db", default=DEFAULT_DB); ca.add_argument("--binary", default=None)
+    ca.add_argument("--gdb-port", type=int, default=1234); ca.add_argument("--limit-mb", type=int, default=64)
+    mo = emu.add_parser("monitor"); mo.add_argument("command"); mo.add_argument("--monitor-port", type=int, default=4444)
+    sc = sub.add_parser("scenario").add_subparsers(dest="scenario_cmd", required=True)
+    for name in ("save", "tag"):
+        p = sc.add_parser(name); p.add_argument("name"); p.add_argument("--db", default=DEFAULT_DB)
+        p.add_argument("--tags", required=True, help="comma-separated, e.g. near_planet,atmosphere")
+        p.add_argument("--notes", default=""); p.add_argument("--monitor-port", type=int, default=4444)
+    sl = sc.add_parser("list"); sl.add_argument("--db", default=DEFAULT_DB)
+    sl.add_argument("--monitor-port", type=int, default=4444)
     dbc = sub.add_parser("db").add_subparsers(dest="db_cmd", required=True)
     cp = dbc.add_parser("copy"); cp.add_argument("--from", dest="src", required=True)
     cp.add_argument("--to", dest="dst", required=True)
@@ -227,6 +249,20 @@ def main(argv=None):
         return eval_cmd(a)
     if a.cmd == "agents":
         return agents_cmd(a)
+    if a.cmd == "emu":
+        from .harness import bringup
+        if a.emu_cmd == "monitor":
+            print(bringup.monitor(a.command, a.monitor_port))
+            return 0
+        r = bringup.calibrate(dbmod.connect(a.db), a.exe, a.binary, port=a.gdb_port, limit_mb=a.limit_mb,
+                              progress=lambda n: print(f"  searched {n >> 20} MB", flush=True))
+        print(json.dumps(r, indent=2))
+        if r["ok"]:
+            emu = {"binary": a.binary, "code_base": r["code_base"], "gdb_port": a.gdb_port, "monitor_port": 4444}
+            print(f"\nFFELAB_EMU='{json.dumps({k: v for k, v in emu.items() if v is not None})}'")
+        return 0 if r["ok"] else 1
+    if a.cmd == "scenario":
+        return scenario_cmd(a)
     if a.cmd == "build":
         r = build(a.src, a.db, a.out, a.docs)
         print(json.dumps(r["report"], indent=2))
@@ -307,6 +343,27 @@ def research_cmd(a) -> int:
         print(f"refused: {e}")
         return 1
     print(json.dumps(r, indent=2))
+    return 0
+
+
+def scenario_cmd(a) -> int:
+    from . import behavior
+    from .harness import bringup
+    led = Ledger(dbmod.connect(a.db))
+    if a.scenario_cmd == "list":
+        have = bringup.snapshots(a.monitor_port)
+        for name, tags in sorted(behavior.scenarios(led).items()):
+            mark = "" if not have else ("  snapshot ok" if name in have else "  NO SNAPSHOT in QEMU")
+            print(f"{name:16} {','.join(sorted(tags))}{mark}")
+        if not have:
+            print("(QEMU monitor not reachable, so snapshots weren't checked)")
+        return 0
+    tags = [t.strip() for t in a.tags.split(",") if t.strip()]
+    if a.scenario_cmd == "save":
+        bringup.save_state(a.name, a.monitor_port)
+        print(f"saved QEMU snapshot {a.name}")
+    behavior.register_scenario(led, a.name, tags, a.notes)
+    print(f"registered {a.name}: {', '.join(sorted(set(tags)))}")
     return 0
 
 

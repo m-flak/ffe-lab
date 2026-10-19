@@ -16,6 +16,7 @@ against a fake stub; expect to adjust key maps and timings once.
 from __future__ import annotations
 
 import bisect
+import os
 import socket
 import struct
 import subprocess
@@ -143,6 +144,7 @@ class EmulatorBackend(GameBackend):
 
     def screenshot(self, path):
         if self.cfg.kind == "qemu":
+            path = os.path.abspath(path)              # QEMU resolves relative paths from its own cwd
             self._monitor(f"screendump {path}")       # PPM; convert if you need PNG
         else:
             subprocess.run(["screencapture", "-x", path], check=True)
