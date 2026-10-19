@@ -6,6 +6,7 @@ Evidence-driven, agent-assisted reverse engineering of **Frontier: First Encount
 > How to use it day to day, in order: **[docs/USAGE.md](docs/USAGE.md)**.
 > Why things are the way they are: **[docs/DECISIONS.md](docs/DECISIONS.md)**.
 > What's next: **[docs/PLAN.md](docs/PLAN.md)**.
+> Game art (bitmaps, meshes): **[docs/ASSET_FORMATS.md](docs/ASSET_FORMATS.md)**.
 
 FFE's x86 asm (from the [ffed3d](https://github.com/corpsofengineers/ffed3d)
 repo) has ~1,600 functions, most without meaningful names. ffelab:
@@ -45,12 +46,13 @@ FFED3D_DIR=../ffed3d python -m pytest       # also runs the real-data test
 | `ffelab uncertain` | The most uncertain functions, where the agent should look next |
 | `ffelab embed` / `ffelab similar FUNC` | Embed every function's normalised code (and scenario fingerprints); list the functions most like one |
 | `ffelab graph build / vote / outliers / check` | Call-graph structure: call layers, a spectral basis searchable with `ffelab similar --model callgraph-spectral-v1`, and static label votes from neighbours and the label quotient (see `docs/GRAPH.md`) |
-| `ffelab db copy --from ffe.db --to postgresql:///ffelab` | Move the whole store to Postgres (or back to a file) |
+| `ffelab db copy --from ffe.db --to postgresql:///ffelab` | Move a whole store into an empty one: SQLite to Postgres (or back). Then `ffelab embed` and `ffelab graph build`; see GETTING_STARTED 4.4 |
 | `ffelab eval run / gate / compare / export` | Score the blind labeller and red team against experiment-confirmed labels; gate prompt changes on it (see `docs/EVALS.md`) |
 | `ffelab agents run [--worker claude\|heuristic] [--trace phoenix]` | Run the orchestrator: blind labeller and red team workers under a budget, every step traced (see `docs/ORCHESTRATOR.md`) |
 | `ffelab agents questions / answer / dismiss` | The batched questions the agents and open contradictions have queued for you |
 | `python -m ffelab.workflows worker / start / status / pause / resume / stop` | Durable experiment campaigns on Temporal: a crash or hang retries from the save state (see GETTING_STARTED "Long runs") |
 | `python -m ffelab.mcp_server` | The MCP server agents use |
+| `python3 tools/meshwalk.py all --src DIR` | Dump the game's meshes as OBJ files (stdlib only; see `docs/ASSET_FORMATS.md`) |
 
 ## Modules
 
@@ -132,7 +134,8 @@ to a JSON `EmulatorConfig`, e.g. `{"binary": "<id from exe-check>", "code_base":
 - Working: static map, ledger, adversarial layer, fingerprints, propagation,
   knockouts, exe-check, export, Pydantic models, eval harness with a gate,
   Postgres + pgvector beside SQLite, Agent SDK orchestrator with tracing,
-  Temporal campaigns, call-graph structure. Unit-tested against fakes (storage
+  Temporal campaigns, call-graph structure, asset formats (bitmaps, meshes;
+  `docs/ASSET_FORMATS.md`). Unit-tested against fakes (storage
   tests also on Postgres) plus one real-data test.
 - Optional servers (Postgres, Temporal, Phoenix) run in Docker:
   [docs/DOCKER.md](docs/DOCKER.md).

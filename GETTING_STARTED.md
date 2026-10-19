@@ -36,7 +36,8 @@ Think of it as a lab notebook with a referee.
         names you can trust
 ```
 
-- **The notebook** (`ffe.db`, a SQLite file) holds everything anyone knows.
+- **The notebook** (`ffe.db`, a SQLite file, or the same tables in Postgres)
+  holds everything anyone knows.
   Nothing important lives only in a chat. That's what lets you stop, come back
   tomorrow, and continue.
 - **The agents** (Claude, via Claude Code) read the notebook, propose what to
@@ -75,7 +76,7 @@ Think of it as a lab notebook with a referee.
 | **Calibration** | Whether your 90%-sure claims are right about 90% of the time. |
 | **Reliability** | A 0–1 score per person/agent (and per subsystem) derived from their Brier scores. Scales how much their calls count. |
 | **AUC** | For the segment map: pick a real file boundary and a non-boundary at random; AUC is how often the model scores the real one higher. 0.5 = guessing, 1.0 = perfect. Currently 0.81. |
-| **MCP** | Model Context Protocol: the standard way to give an AI agent tools. ffelab runs an MCP server exposing ~30 tools to Claude. |
+| **MCP** | Model Context Protocol: the standard way to give an AI agent tools. ffelab runs an MCP server exposing ~35 tools to Claude. |
 | **Scenario** | A named emulator save state (e.g. `orbit_atmo`) with tags describing it. |
 
 ---
@@ -87,12 +88,16 @@ Think of it as a lab notebook with a referee.
 ```bash
 mkdir -p ~/re && cd ~/re
 git clone https://github.com/corpsofengineers/ffed3d     # the FFE asm source
-# put ffe-lab here too (unzip it, or clone it once it's on GitHub)
+git clone https://github.com/m-flak/ffe-lab
 cd ffe-lab
 python3 -m venv .venv
 source .venv/bin/activate          # do this every time you open a new terminal
-pip install -e ".[agent,dev]"
+pip install -e ".[agent,evals,dev]"
 ```
+
+The other extras are for optional pieces, added when you reach them: `pg`
+(Postgres, 4.4), `orchestrator` (unattended agent runs), `durable` (Temporal
+campaigns). `docs/USAGE.md` says when each one is worth it.
 
 ### 4.2 Build the database and module map
 
@@ -108,7 +113,7 @@ This creates:
 Check everything works:
 
 ```bash
-python -m pytest                              # should say ~53 passed
+python -m pytest                              # should pass; some tests skip until their extra or server is installed
 FFED3D_DIR=~/re/ffed3d python -m pytest       # also runs the real-data test
 ```
 
@@ -145,34 +150,89 @@ If it lists tools like `belief`, `blind_view`, `run_knockout`, you're connected.
 The two agents in `.claude/agents/` (`red-team`, `blind-labeller`) are picked up
 automatically; you invoke them by asking for them by name.
 
-### 4.4 Optional: Postgres, when several agents work at once
+### 4.4 Optional: Postgres and the vector search
 
-`ffe.db` (SQLite) is fine for you plus one agent. When several agents write the
-ledger at the same time, or you want the "find functions like this one"
-search to run in the database, move to Postgres. Nothing else changes: same
-tables, same commands, same tools.
+`ffe.db` (SQLite) is fine for you plus one agent. Move to Postgres when several
+agents write the ledger at the same time, or when you want the "find
+functions like this one" search to run in the database (pgvector, the
+vector-search extension). Nothing else changes: same tables, same commands,
+same tools.
+
+**Get a server.** Either one works:
+
+- *Docker* (the default; nothing to install on the Mac): `docs/DOCKER.md`.
+  In short: `cp .env.example .env`, `docker compose --profile pg up -d --wait`,
+  then `set -a; source .env; set +a`. That sets
+  `FFELAB_DB=postgresql://ffelab:ffelab@localhost:5432/ffelab`.
+- *Homebrew*:
+
+  ```bash
+  brew install postgresql@17 pgvector
+  export PATH="$(brew --prefix postgresql@17)/bin:$PATH"   # versioned formula, not on PATH by default
+  brew services start postgresql@17
+  createdb ffelab
+  export FFELAB_DB=postgresql:///ffelab
+  ```
+
+  (Postgres.app, which bundles pgvector, works too.)
+
+Then install the Python driver: `pip install -e ".[pg]"`.
+
+**Import an existing `ffe.db`.** This works for any `ffe.db` written by
+ffelab, including one another tool or session made (for example the one from
+the Muse asset and texture-loading research). Copy it next to the repo first;
+the commands below call it `ffe.db`.
 
 ```bash
-brew install postgresql@17 pgvector            # pgvector: the vector-search extension
-export PATH="$(brew --prefix postgresql@17)/bin:$PATH"   # versioned formula, not on PATH by default
-brew services start postgresql@17
-createdb ffelab
-pip install -e ".[pg]"                         # the Python driver (psycopg)
-
-ffelab db copy --from ffe.db --to postgresql:///ffelab   # copies everything, ids kept
-export FFELAB_DB=postgresql:///ffelab          # every ffelab command now uses Postgres
-ffelab embed                                   # vectors for similarity search
-ffelab similar 688                             # functions whose code looks like FUNC 688's
-ffelab graph build                             # call layers + call-graph basis (also works on SQLite)
-ffelab similar 688 --model callgraph-spectral-v1   # functions near 688 in the call graph
-ffelab graph check                             # how well the graph votes predict known labels
-ffelab graph vote                              # write them as static evidence (never settles anything)
+ffelab db copy --from ffe.db --to "$FFELAB_DB"   # every table, ids kept
+ffelab embed                                     # rebuild the vectors (the copy skips them)
+ffelab graph build                               # refresh call layers + call-graph basis
 ```
 
-Put the same URL in `.mcp.json` as `"FFELAB_DB": "postgresql:///ffelab"`.
-(Postgres.app, which bundles pgvector, works too.) To run the test suite on
-Postgres: `createdb ffelab_test`, then
-`FFELAB_TEST_PG=postgresql:///ffelab_test python -m pytest`.
+Check it landed:
+
+```bash
+ffelab uncertain -n 5                    # the ledger answers from Postgres
+ffelab similar 1805                      # code-similarity search
+ffelab similar 1805 --model callgraph-spectral-v1   # call-graph neighbours
+```
+
+What to know about the copy:
+
+- **The destination must be empty.** It refuses otherwise ("destination is not
+  empty"), so it never mixes two ledgers. To start over: `dropdb ffelab && createdb ffelab`
+  (Docker: `docker compose exec postgres dropdb -U ffelab --force ffelab`, then
+  `docker compose exec postgres createdb -U ffelab ffelab`).
+- **It moves one ledger; it doesn't merge two.** If you have two `ffe.db`
+  files with different work in them, pick the one to keep, or re-record the
+  other's calls through Claude Code ("record a call: ...") so they land as new
+  claims.
+- **Nothing gets promoted.** Claims come across as open claims with their
+  original source and confidence (Muse's are under sources like
+  `ai:lut-analysis` and `ai:blind`). Only experiments settle them, same as before.
+- **No need to re-run `ffelab build`.** The static map (functions, calls,
+  segments) is copied too. Static graph votes come across as well; re-run
+  `ffelab graph vote` only after labels change.
+- The orchestrator's queued questions (`ffelab agents questions`) are not
+  copied. Answer or dismiss them before moving.
+
+**Point everything at it.** Every `ffelab` command, the Temporal worker and the
+MCP server read `FFELAB_DB` (`--db` overrides it for one command). Put the same
+URL in `.mcp.json` as `"FFELAB_DB"` so Claude Code's tools use it too. To run
+the test suite on Postgres: `createdb ffelab_test`, then
+`FFELAB_TEST_PG=postgresql:///ffelab_test python -m pytest` (the Docker
+container already has `ffelab_test`).
+
+**Re-run `ffelab embed`** after new functions or new logging passes, so the
+fingerprint vectors catch up.
+
+More graph commands, once the ledger is in place:
+
+```bash
+ffelab graph check                       # how well the graph votes predict known labels
+ffelab graph vote                        # write them as static evidence (never settles anything)
+ffelab graph outliers                    # calls between labels nothing else supports
+```
 
 Terms: an *embedding* is a list of numbers describing a function, built so
 similar functions get similar lists; *similarity* is the cosine between two
@@ -182,7 +242,9 @@ fires in. They point you at candidates; only experiments settle anything.
 The call-graph basis places functions by who calls whom; the *quotient* is the
 small label-to-label call graph you get by collapsing each labelled function to
 its label, which rules out most labels for a function from its labelled
-neighbours. Findings and numbers: `docs/GRAPH.md`.
+neighbours. Findings and numbers: `docs/GRAPH.md`. Without pgvector on the
+server, ffelab stores vectors as bytes and searches them in Python, which is
+slower but gives the same answers.
 
 ---
 
@@ -200,6 +262,7 @@ No emulator needed. You read code and make calls; the AI assists.
 | Look at a function | "Show me the blind view of FUNC 688 and explain what the code does." |
 | Record what you know | "Record a call: 688 is ai/traffic/spawning, 85% confidence, source human." |
 | Spread knowledge | "Run label propagation and tell me which functions moved most." |
+| Find look-alikes | "Use similar_functions on 1805 and tell me which neighbours already have labels." |
 | Use the call graph | "Run graph_votes, then list unnamed functions whose belief moved most and why." |
 | Find suspect labels | "Show quotient_outliers and have the red team look at the confident claims there." |
 | Get a second opinion | "Use the blind-labeller agent on the first ten functions of segment 12." |
@@ -338,8 +401,8 @@ crash or hang retries from the save state instead of losing the run (D11):
 
 ```bash
 pip install -e '.[durable]'
-brew install temporal
-temporal server start-dev --db-filename campaigns.db        # web UI: http://localhost:8233
+brew install temporal                                       # or skip these two lines and use
+temporal server start-dev --db-filename campaigns.db        # Docker's `temporal` profile (docs/DOCKER.md); UI: http://localhost:8233
 python -m ffelab.workflows worker --db ffe.db --backend qemu --emu '{"code_base": 0}'   # your calibrated code_base (Stage 2)
 python -m ffelab.workflows start plan.json                  # in another terminal
 python -m ffelab.workflows status NAME                      # or pause / resume / stop
@@ -358,72 +421,48 @@ Try it first with `--backend fake --emu '{"truth": {"orbit_atmo": {"10": 1.0}}}'
 
 ---
 
-## 7. What's not built yet
+## 7. What's built, and what isn't yet
 
-Be aware of these so they don't surprise you:
+Built, each with its own page:
 
-- **The rest of the AI-engineering stack** (Agent SDK + tracing) — see
-  `docs/PLAN.md`. Pydantic + evals, Postgres and Temporal campaigns are built.
-- **A batched question queue** — the agent asks as it goes (comes with the Agent SDK step).
-- **A built-FFED3D backend** (linker-map symbols, compile-time counters) — optional.
-- **Call-site, return-value and data knockouts** — only whole-function knockouts exist.
-- **The real emulator backend is untested** — Stage 2 is where that gets fixed.
+- **Unattended agent runs** (`ffelab agents run`): the blind labeller and red
+  team as workers under a dollar/time budget, every step traced, and a batched
+  question queue for you (`ffelab agents questions`). `docs/ORCHESTRATOR.md`.
+- **Evals** (`ffelab eval`): score the agents by a number before keeping a
+  prompt or model change. `docs/EVALS.md`.
+- **Postgres + vector search** (4.4), **Temporal campaigns** ("Long runs"
+  above), **call-graph structure** (`docs/GRAPH.md`), and **Docker** for the
+  servers (`docs/DOCKER.md`).
+- **Game asset formats**: bitmaps and the 465-model mesh table, with
+  `python3 tools/meshwalk.py all --src ~/re/ffed3d` dumping meshes as OBJ
+  files. `docs/ASSET_FORMATS.md`. Not yet checked against the running game.
 
-`docs/PLAN.md` has the full roadmap.
+Not built yet:
+
+- **The real emulator backend is untested.** Stage 2 is where that gets fixed,
+  and almost everything above needs experiments to say anything real.
+- **A built-FFED3D backend** (linker-map symbols, compile-time counters): optional.
+- **Call-site, return-value and data knockouts**: only whole-function knockouts exist.
+- **Merging two ledgers**: `ffelab db copy` moves one whole store into an empty one.
+
+`docs/USAGE.md` puts all of it in order; `docs/PLAN.md` has the roadmap.
 
 ---
 
-## 8. Carrying this into a claude.ai Project
+## 8. The claude.ai Project
 
-Three layers of context, from most to least reliable:
+The repo is on GitHub (github.com/m-flak/ffe-lab) and the claude.ai Project
+"FFE LAB" is set up with it. Three layers of context, from most to least reliable:
 
-1. **The repo files** — the durable record. `docs/DECISIONS.md` holds the
-   reasoning from the original design conversation; `docs/PLAN.md` holds what's next.
-2. **Project knowledge** — those files, made available to every chat in the Project.
-3. **The original chat** — moved into the Project so later chats can search it.
-
-**Steps:**
-
-1. **Push the repo to GitHub** (see below if you haven't before).
-2. **Create the Project:** go to claude.ai/projects → **+ New Project** → name
-   it (e.g. "ffelab"). The name and description are just for you; Claude doesn't see them.
-3. **Add the repo as knowledge:** in the Project's knowledge section click **+** →
-   **GitHub** → pick the repo → select at least `README.md`, `GETTING_STARTED.md`,
-   `docs/` and `src/`. Use **Sync now** after you push changes; it doesn't update
-   on its own.
-4. **Set Project instructions:** click **Set project instructions** and paste:
-
-   > This project reverse-engineers Frontier: First Encounters with ffelab
-   > (repo: <your GitHub URL>). The FFE asm comes from the ffed3d repo
-   > (github.com/corpsofengineers/ffed3d). I'm a somewhat experienced reverser but new to
-   > AI engineering; keep answers practical and explain AI/ML terms briefly.
-   > Read docs/DECISIONS.md before proposing design changes and docs/PLAN.md for
-   > what's next. Everything durable lives in the repo and ffe.db; treat chat as
-   > scratch. Respect the ledger rules: only experiments settle bets,
-   > contradictions get reviewed, confidences are honest.
-
-5. **Move the original design chat into the Project:** open that chat, click the
-   **dropdown arrow next to the chat name** → **Add to project** → pick the
-   Project. Chats inside a Project can search other chats in the same Project
-   (paid plans, with "Search and reference chats" on in Settings → Memory).
+1. **The repo files**: the durable record. `docs/DECISIONS.md` holds the
+   reasoning behind the design; `docs/PLAN.md` holds what's next.
+2. **The ledger** (`ffe.db` or Postgres): every claim, experiment and score.
+   Keep `ffe.db` out of git (it's in `.gitignore`); `ffelab build` rebuilds the
+   static part, and the ledger itself moves with `ffelab db copy`.
+3. **Chat**: scratch. Anything worth keeping goes into the repo or the ledger.
 
 Use the Project for planning and discussion; use Claude Code in the repo for
 the hands-on work (it's the one with the tools and the game).
-
-**First time pushing to GitHub:**
-
-```bash
-cd ~/re/ffe-lab
-git init            # skip if the folder already has a .git
-git add -A && git commit -m "ffelab v0.4"
-# create an empty repo on github.com (no README), then:
-git remote add origin https://github.com/YOU/ffe-lab.git
-git branch -M main
-git push -u origin main
-```
-
-Keep `ffe.db` out of git (it's in `.gitignore`); it's rebuilt with `ffelab build`
-and later will live in Postgres.
 
 ---
 
@@ -436,6 +475,7 @@ and later will live in Postgres.
 | `ModuleNotFoundError: mcp` | `pip install -e ".[agent]"` |
 | "Postgres support needs psycopg" | `pip install -e ".[pg]"` |
 | `connection refused` on a `postgresql://` URL | `brew services start postgresql@17` |
+| `db copy` says "destination is not empty" | It never merges; empty the database first (4.4, "start over") |
 | `similar` says "has no ... embedding" | Run `ffelab embed` (again after new functions or logging passes); for `callgraph-spectral-v1`, `ffelab graph build` |
 | Tests fail on `TestRealData` | Set `FFED3D_DIR` to the ffed3d folder, or ignore (it's optional) |
 | "bets can only be resolved by a recorded experiment" | Working as intended: run the experiment first |

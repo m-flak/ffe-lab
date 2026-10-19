@@ -190,10 +190,18 @@ Switch when you run several agents at once (for example the orchestrator and a
 Temporal worker together). Otherwise stay on SQLite.
 
 ```bash
-pip install -e ".[pg]"                       # server: Docker `pg` profile (step 5)
-ffelab db copy --from ffe.db --to "$FFELAB_DB"
-ffelab embed && ffelab similar 688
+pip install -e ".[pg]"                           # server: Docker `pg` profile (step 5)
+ffelab db copy --from ffe.db --to "$FFELAB_DB"   # into an empty database; ids kept
+ffelab embed                                     # vectors aren't copied; rebuild them
+ffelab graph build                               # refresh call layers + call-graph basis
+ffelab similar 688                               # check: search answers from Postgres
 ```
+
+The same steps import an `ffe.db` made elsewhere, such as the one from the
+Muse asset research: its claims arrive as open claims under their original
+sources, never as settled labels. The copy refuses a non-empty database and
+does not merge two ledgers; GETTING_STARTED 4.4 has the caveats and how to
+start over.
 
 Put the same `FFELAB_DB` URL in `.mcp.json` for Claude Code. (Installing
 Postgres with Homebrew instead is in GETTING_STARTED 4.4.)
