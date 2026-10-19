@@ -275,8 +275,15 @@ No emulator needed. You read code and make calls; the AI assists.
 | See what's most uncertain | "Which functions are most uncertain right now?" |
 
 **An outside researcher** (Muse today) works the same phase from the command
-line: it reads with `ffelab research view / refs / grep` and writes only
-claims with `ffelab research claim`. Hand it `docs/STATIC_RESEARCH.md` as its brief.
+line or through its own MCP server (`python -m ffelab.mcp_research`, read
+tools plus `claim` and nothing else): it reads with `ffelab research view /
+refs / grep` and writes only claims with `ffelab research claim`. Hand it
+`docs/STATIC_RESEARCH.md` as its brief; it has the MCP config too.
+
+**Frontier: Elite II as a reference** (optional): `ffelab ref import` matches
+about 160 FFE functions to glFrontier's labelled 68k disassembly, by shared
+tables and constants. The matches are hints shown by `belief`, never evidence.
+`docs/REFERENCES.md` says where to get `fe2.s`.
 
 **Tips:**
 - **Be honest with confidence.** 60% is a perfectly good call. Your accuracy is
@@ -453,6 +460,11 @@ Built, each with its own page:
 - **Postgres + vector search** (4.4), **Temporal campaigns** ("Long runs"
   above), **call-graph structure** (`docs/GRAPH.md`), and **Docker** for the
   servers (`docs/DOCKER.md`).
+- **Emulator tooling**: `ffelab emu calibrate`, `ffelab scenario save` and a
+  step-by-step QEMU + FreeDOS setup. `docs/EMULATOR.md`.
+- **Static research** by an outside agent, claims only (`ffelab research`,
+  `ffelab.mcp_research`). `docs/STATIC_RESEARCH.md`.
+- **Frontier: Elite II reference matches** (`ffelab ref`). `docs/REFERENCES.md`.
 - **Game asset formats**: bitmaps and the 465-model mesh table, with
   `python3 tools/meshwalk.py all --src ~/re/ffed3d` dumping meshes as OBJ
   files. `docs/ASSET_FORMATS.md`. Not yet checked against the running game.
