@@ -140,6 +140,15 @@ CREATE TABLE IF NOT EXISTS graph_features (
     depth INTEGER,                -- longest call chain above
     cycle INTEGER, cycle_size INTEGER   -- the cycle (strongly connected component) it sits in, if any
 );
+-- reference matches to other Frontier code (fe2ref.py): facts, not evidence ---
+CREATE TABLE IF NOT EXISTS ref_matches (
+    func INTEGER, ref TEXT,       -- ref: which reference, e.g. glfrontier (Frontier: Elite II, 68k)
+    ref_label TEXT, ref_name TEXT, ref_addr INTEGER,
+    how TEXT,                     -- data | const | propagated | propagated_weak
+    csim REAL,                    -- shared-constant similarity
+    confidence REAL,
+    PRIMARY KEY (func, ref)
+);
 -- similarity search (embed.py) ---------------------------------------------
 CREATE TABLE IF NOT EXISTS embeddings (
     func INTEGER, model TEXT,     -- model: which embedder made the vector, e.g. asm-ngram-v1

@@ -16,6 +16,7 @@ except ImportError:                    # mcp 1.x
 
 from . import adversary as adv
 from . import behavior
+from . import fe2ref
 from . import knockout as ko
 from . import labels as lbl
 from . import propagate as prop
@@ -95,7 +96,8 @@ def belief(func: int) -> dict:
     exp, n = _ledger.experimental_belief(func)
     return {"function": fn, "belief": _ledger.belief(func),
             "experimental_belief": exp, "experiment_rows": n,
-            "open_bets": [dict(b) for b in _ledger.open_bets(func)]}
+            "open_bets": [dict(b) for b in _ledger.open_bets(func)],
+            "ref_matches": fe2ref.matches_for(_con, func)}   # other people's names: never in blind_view
 
 
 @mcp.tool()
