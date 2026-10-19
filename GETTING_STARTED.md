@@ -187,7 +187,12 @@ the commands below call it `ffe.db`.
 ffelab db copy --from ffe.db --to "$FFELAB_DB"   # every table, ids kept
 ffelab embed                                     # rebuild the vectors (the copy skips them)
 ffelab graph build                               # refresh call layers + call-graph basis
+ffelab research retag ai:lut-analysis ai:muse    # Muse's file only: one source name for Muse
 ```
+
+The `retag` line is for the Muse file: it moves Muse's claims from the topic
+name it used (`ai:lut-analysis`) to its one source name, `ai:muse`, so all of
+Muse's work is scored as one record (docs/STATIC_RESEARCH.md says why).
 
 Check it landed:
 
@@ -208,8 +213,8 @@ What to know about the copy:
   other's calls through Claude Code ("record a call: ...") so they land as new
   claims.
 - **Nothing gets promoted.** Claims come across as open claims with their
-  original source and confidence (Muse's are under sources like
-  `ai:lut-analysis` and `ai:blind`). Only experiments settle them, same as before.
+  original source and confidence (Muse's are under `ai:lut-analysis`, `ai:muse`
+  after the retag, and `ai:blind`). Only experiments settle them, same as before.
 - **No need to re-run `ffelab build`.** The static map (functions, calls,
   segments) is copied too. Static graph votes come across as well; re-run
   `ffelab graph vote` only after labels change.
@@ -268,6 +273,10 @@ No emulator needed. You read code and make calls; the AI assists.
 | Get a second opinion | "Use the blind-labeller agent on the first ten functions of segment 12." |
 | Find disagreements | "Reveal the blind labels for those and list disagreements with my calls." |
 | See what's most uncertain | "Which functions are most uncertain right now?" |
+
+**An outside researcher** (Muse today) works the same phase from the command
+line: it reads with `ffelab research view / refs / grep` and writes only
+claims with `ffelab research claim`. Hand it `docs/STATIC_RESEARCH.md` as its brief.
 
 **Tips:**
 - **Be honest with confidence.** 60% is a perfectly good call. Your accuracy is

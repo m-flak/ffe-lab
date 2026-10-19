@@ -75,7 +75,8 @@ the most similar call neighbourhoods. Details: `docs/GRAPH.md`.
 Then connect Claude Code through `.mcp.json` with `FFELAB_BACKEND=fake`
 (GETTING_STARTED 4.3). You can already do static work: read blind views, make
 calls, run propagation. **You:** record what you already know, with honest
-confidences.
+confidences. An outside researcher such as Muse does this phase through
+`ffelab research` and records claims only; its brief is `docs/STATIC_RESEARCH.md`.
 
 ## 3. Check your game binary (do this first, before any emulator work)
 
@@ -200,6 +201,7 @@ pip install -e ".[pg]"                           # server: Docker `pg` profile (
 ffelab db copy --from ffe.db --to "$FFELAB_DB"   # into an empty database; ids kept
 ffelab embed                                     # vectors aren't copied; rebuild them
 ffelab graph build                               # refresh call layers + call-graph basis
+ffelab research retag ai:lut-analysis ai:muse    # Muse's file only: one source name for Muse
 ffelab similar 688                               # check: search answers from Postgres
 ```
 

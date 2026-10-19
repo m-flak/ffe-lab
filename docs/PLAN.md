@@ -97,6 +97,19 @@ solves a real problem in ffelab. Keep SQLite as a zero-setup "lite mode".
 
 ---
 
+## Static-first phase (now, until the emulator runs)
+
+- An outside researcher (Muse) works from code and data alone through
+  `ffelab research` (view / refs / grep to read; claim / import to write) under
+  one source name, `ai:muse`. It makes claims only; experiments settle them
+  later. Protocol: `docs/STATIC_RESEARCH.md`.
+- Muse's first `ffe.db` imports with `ffelab db copy`, then
+  `ffelab research retag ai:lut-analysis ai:muse` (GETTING_STARTED 4.4).
+- Later: a `static-researcher` worker under `ffelab agents run`, with the same
+  brief and the same claims-only tools.
+
+---
+
 ## Emulator bring-up (in parallel with the above)
 
 Which binary, and why: see `DECISIONS.md` (D6). Short version: original DOS
