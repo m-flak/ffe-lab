@@ -65,7 +65,8 @@ CLI commands below; the MCP tools of the same purpose take the same arguments.
 
 Also read the source directly: `ffe.asm`, `ffedat.asm` (data, with JJ's
 comments), `ffebmp.asm` (bitmaps) and the C++ ports in `win/` of the ffed3d
-repo, plus `docs/ASSET_FORMATS.md`, `docs/GRAPH.md` and `docs/MODULE_MAP.md`.
+repo, plus `docs/ANISO_NOTES.md`, `docs/ASSET_FORMATS.md`, `docs/MISSION_RECORD.md`, `docs/MODEL_RECORD.md`, `docs/GRAPH.md`, and `docs/MODULE_MAP.md`.
+There's also the `docs/OBJECT_LAYOUT.md` file, but the researcher that wrote it really struggled. I would read the warning prelude paragraph and weigh the risks of consulting this file. It has some helpful information, but the researching agent destroyed it and tried to recover it. Treat it with caution.
 
 ## Write (claims only)
 
