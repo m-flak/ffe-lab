@@ -2,15 +2,53 @@
 
 Talks to any emulator that exposes a GDB stub (QEMU's ``-gdb tcp::1234``
 always does; some DOSBox builds and forks do too). Only what the harness
-needs: breakpoints, continue, interrupt, registers, memory.
+needs: breakpoints, watchpoints, continue, step, interrupt, registers, memory.
+
+QEMU supports write/read/access watchpoints (Z2/Z3/Z4) under TCG, the
+software CPU ``run-ffe.sh`` uses, with no 4-slot debug-register limit. The GDB
+protocol has no I/O-port breakpoints; see ``harness/emulator.py`` for the
+port-write trace that stands in for them.
 """
 from __future__ import annotations
 
+import re
 import socket
 import struct
+from dataclasses import dataclass
 
 I386_REGS = ["eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi", "eip", "eflags",
              "cs", "ss", "ds", "es", "fs", "gs"]
+
+
+WATCH_TYPES = {"write": 2, "read": 3, "access": 4}
+_STOP_WATCH_RE = re.compile(r"(r|a)?watch:([0-9a-fA-F]+)")
+
+
+@dataclass
+class Stop:
+    """A parsed stop reply. ``watch_kind``/``watch_addr`` are set when a watchpoint fired."""
+    raw: str
+    signal: int | None = None
+    watch_kind: str | None = None          # "write" | "read" | "access"
+    watch_addr: int | None = None
+
+    @property
+    def is_trap(self) -> bool:
+        return self.signal == 5
+
+
+def parse_stop(reply: str) -> Stop:
+    """Parse 'T05watch:1234;thread:01;' / 'S05' / 'W00'; unknown shapes keep only ``raw``."""
+    stop = Stop(raw=reply)
+    if len(reply) >= 3 and reply[0] in "TS":
+        try:
+            stop.signal = int(reply[1:3], 16)
+        except ValueError:
+            return stop
+        if (m := _STOP_WATCH_RE.search(reply)):
+            stop.watch_kind = {"r": "read", "a": "access"}.get(m.group(1), "write")
+            stop.watch_addr = int(m.group(2), 16)
+    return stop
 
 
 def checksum(payload: bytes) -> bytes:
@@ -59,6 +97,16 @@ class GdbRemote:
     def remove_breakpoint(self, addr: int) -> bool:
         return self.command(f"z0,{addr:x},1") == "OK"
 
+    def set_watchpoint(self, addr: int, length: int, kind: str = "write") -> bool:
+        return self.command(f"Z{WATCH_TYPES[kind]},{addr:x},{length:x}") == "OK"
+
+    def remove_watchpoint(self, addr: int, length: int, kind: str = "write") -> bool:
+        return self.command(f"z{WATCH_TYPES[kind]},{addr:x},{length:x}") == "OK"
+
+    def step(self) -> str:
+        """Execute one instruction; returns the stop reply."""
+        return self.command("s")
+
     def cont(self, timeout: float | None = None) -> str:
         """Continue; returns the stop reply (e.g. 'T05...') or '' on timeout."""
         self.sock.sendall(frame("c"))
@@ -91,3 +139,11 @@ class GdbRemote:
         if reply.startswith("E"):
             raise IOError(f"memory read failed at {addr:#x}: {reply}")
         return bytes.fromhex(reply)
+
+    def read_cstr(self, addr: int, limit: int = 128) -> str:
+        """A NUL-terminated string at ``addr`` (e.g. a DOS filename), read in one go."""
+        try:
+            raw = self.read_mem(addr, limit)
+        except IOError:
+            return ""
+        return raw.split(b"\0", 1)[0].decode("latin-1")

@@ -206,6 +206,36 @@ glFrontier's licence is unclear, so neither is vendored; the parser is ours.
 become `static_ref` evidence with its own source reliability), or experiments
 show the matches are worse than the hold-out suggests (lower the confidences).
 
+### D18. Observation beyond the screen: watchpoints, port-write counts, DOS file calls
+Knockouts judged only by screenshots can't see music, file loading or state
+nobody draws. Three observations were added, all on QEMU without changing
+`run-ffe.sh` (save states stay valid):
+- *Memory watchpoints* over the GDB stub (Z2/Z3/Z4; TCG has no 4-slot limit).
+- *Sound as a knockout channel.* The GDB protocol has no I/O-port
+  breakpoints, and QEMU's guest debug-register I/O breakpoints raise #DB
+  inside the guest, not to the debugger. So writes are counted from QEMU's
+  `memory_region_ops_write` trace event per device (`sb16`, `adlib`,
+  `pcspk`), switched on from the monitor around each run, and compared
+  against two baselines like the screenshots. The event carries no PC: it
+  shows *that* the sound changed, and watchpoints or halts show who did it.
+  A TCG plugin could give per-instruction port writes, but needs a C build
+  against QEMU's plugin API; rejected until counts prove too coarse.
+- *DOS file calls* at the game's own `int 21h` / DPMI `int 31h` sites. These
+  are in the C runtime JJ replaced, so they're found by scanning the exe
+  outside the mapped functions. Breaking in DOS/4GW's handler instead would
+  catch everything, but at ring 3 the interrupt switches stacks, so the
+  game's frames would be lost.
+*Ledger rules:* knockout sound outcomes and watch passes are experiments, so
+they move beliefs and settle `audible`/`inaudible` knockout bets; a run with
+no sound in the baselines (`no_audio`) leaves those bets open. File passes
+are recorded but move no beliefs: mapping a filename to a subsystem is a
+judgement, made as an observation or claim. `func_at` no longer credits
+unmapped code (C runtime, HMI, DOS/4GW) to the function just below it; stops
+there go to the nearest mapped caller on the stack, or to nobody.
+*Would change if:* the trace backend is missing or too slow on the Mac (then
+a TCG plugin or the `wav` audio backend), or port-write counts prove too
+noisy to separate music from sound effects (then per-port histograms).
+
 ---
 
 ## Open questions

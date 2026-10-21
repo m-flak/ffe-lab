@@ -149,7 +149,8 @@ hit counters instead of breakpoints, knockouts as source edits). Windows VM only
 
 **Experiments**
 - Call-site knockouts (needs instruction addresses in the parser), return-value
-  knockouts, data knockouts, audio diffs.
+  knockouts, data knockouts. (Audio diffs: built as port-write counts, D18;
+  still untested on the live game.)
 - Memory-map bootstrap: confirmed addresses for player position, docked flag,
   current system, so experiments read state directly.
 - Use behaviour groups as soft segment evidence.

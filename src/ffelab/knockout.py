@@ -19,6 +19,16 @@ The first two are scored automatically. The third needs eyes: the agent (or
 you) looks at the diff image and records an *observation* with a label path
 such as ``render/planet/atmosphere/clouds``. Observations are tied to the
 experiment and its images, so anyone can audit them later.
+
+Sound is a second channel, for code a screenshot can't tell apart. When the
+backend can count sound-card port writes (QEMU's trace; see
+``harness/emulator.py``), each of the three runs is counted per device, and
+the same noise mask applies: a knockout is *audible* when some device's
+writes moved by clearly more than they did between the two baselines. A
+scenario with no sound activity in the baselines says nothing either way
+(``no_audio``). Music runs off a timer interrupt, so a knockout only shows if
+the music would have changed inside the window: give such scenarios keys that
+start or switch it (launch, docking, combat).
 """
 from __future__ import annotations
 
@@ -37,6 +47,27 @@ LIKE_CRASH = {"platform": 1.5, "math": 1.4, "physics": 1.3, "io": 1.2, "ai": 1.1
               "render": 0.9, "ui": 0.9, "text": 0.9, "audio": 0.8}
 LIKE_INVISIBLE = {"render": 0.4, "ui": 0.5, "text": 0.6}
 LIKE_VISIBLE = {"render": 2.0, "ui": 1.5, "text": 1.3}
+
+AUDIO_MIN_WRITES = 20               # fewer writes than this in a run counts as silence
+AUDIO_REL_CHANGE = 0.3              # change, as a fraction of the baseline, counted as audible
+LIKE_AUDIBLE = {"audio": 2.5}
+LIKE_INAUDIBLE = {"audio": 0.5}
+
+
+def audio_diff(a: dict[str, int], b: dict[str, int], k: dict[str, int]) -> dict:
+    """Compare sound-card writes per device: baseline ``a``, second baseline ``b``
+    (noise), knocked ``k``. Outcome: audible | inaudible | no_audio."""
+    per, changed, active = {}, False, False
+    for d in sorted(set(a) | set(b) | set(k)):
+        na, nb, nk = a.get(d, 0), b.get(d, 0), k.get(d, 0)
+        base = max(na, nb)
+        active |= base >= AUDIO_MIN_WRITES
+        ch = base >= AUDIO_MIN_WRITES or nk >= AUDIO_MIN_WRITES
+        ch = ch and abs(nk - na) > max(2 * abs(na - nb), AUDIO_REL_CHANGE * base, AUDIO_MIN_WRITES)
+        changed |= ch
+        per[d] = {"baseA": na, "baseB": nb, "knocked": nk, "changed": ch}
+    outcome = "audible" if changed else ("inaudible" if active else "no_audio")
+    return {"devices": per, "outcome": outcome}
 
 
 def image_diff(a_path: str, b_path: str, out_path: str | None = None,
@@ -76,28 +107,37 @@ def knockout(backend: GameBackend, ledger: Ledger, scenario: str, func: int,
     stem = os.path.join(outdir, f"{scenario}_F{func}")
     paths = {k: f"{stem}_{k}.png" for k in ("baseA", "baseB", "knocked", "diff")}
 
-    def play():
-        backend.load_state(scenario)
+    def run() -> dict[str, int] | None:
         if keys:
             backend.press_keys(keys)
-        backend.wait(settle_ms)
+        tracing = backend.start_audio_trace()
+        try:
+            backend.wait(settle_ms)
+        finally:
+            sound = backend.stop_audio_trace() if tracing else None
+        return sound
+
+    def play():
+        backend.load_state(scenario)
+        return run()
 
     backend.clear_breakpoints()
-    play(); backend.screenshot(paths["baseA"])
-    play(); backend.screenshot(paths["baseB"])
+    sound_a = play(); backend.screenshot(paths["baseA"])
+    sound_b = play(); backend.screenshot(paths["baseB"])
     backend.load_state(scenario)
     backend.knock_out(func, patch)
     try:
-        if keys:
-            backend.press_keys(keys)
-        backend.wait(settle_ms)
+        sound_k = run()
         health = backend.health()
         backend.screenshot(paths["knocked"])
     finally:
         backend.restore(func)
         backend.load_state(scenario)             # leave the game in a clean state
 
-    result = {"func": func, "scenario": scenario, "health": health, "images": paths}
+    audio = (audio_diff(sound_a, sound_b, sound_k)
+             if health == "ok" and None not in (sound_a, sound_b, sound_k) else None)
+    result = {"func": func, "scenario": scenario, "health": health, "images": paths,
+              "audio": audio, "audio_outcome": audio["outcome"] if audio else None}
     if health == "ok":
         d = image_diff(paths["baseA"], paths["knocked"], paths["diff"], noise_path=paths["baseB"])
         result.update(d)
@@ -109,7 +149,8 @@ def knockout(backend: GameBackend, ledger: Ledger, scenario: str, func: int,
 
     exp = ledger.record_experiment("knockout", scenario, {
         "func": func, "keys": keys, "patch": patch.hex(), "health": health, "outcome": outcome,
-        "changed_frac": result.get("changed_frac"), "bbox": result.get("bbox"), "images": paths})
+        "changed_frac": result.get("changed_frac"), "bbox": result.get("bbox"), "images": paths,
+        "audio": audio, "audio_outcome": result["audio_outcome"]})
     ledger.con.execute(
         "INSERT INTO knockouts (experiment_id, func, scenario, health, changed_frac, bbox, baseline, knocked, diff_image)"
         " VALUES (?,?,?,?,?,?,?,?,?)",
@@ -121,20 +162,31 @@ def knockout(backend: GameBackend, ledger: Ledger, scenario: str, func: int,
     ledger.update(func, like, "knockout", "knockout",
                   f"{scenario}: {outcome} (changed {result.get('changed_frac')})", strength=0.8,
                   experiment_id=exp)
+    if result["audio_outcome"] in ("audible", "inaudible"):
+        changed = {d: v for d, v in audio["devices"].items() if v["changed"]}
+        ledger.update(func, LIKE_AUDIBLE if changed else LIKE_INAUDIBLE, "knockout", "knockout_audio",
+                      f"{scenario}: {result['audio_outcome']} {json.dumps(changed or audio['devices'])}",
+                      strength=0.8, experiment_id=exp)
     result["experiment"] = exp
-    result["resolved"] = _resolve_knockout_bets(ledger, exp, scenario, func, outcome)
+    result["resolved"] = _resolve_knockout_bets(ledger, exp, scenario, func, outcome, result["audio_outcome"])
     result["next"] = ("look at the diff image and call record_knockout_observation"
                       if outcome == "visible" else None)
     return result
 
 
-def _resolve_knockout_bets(ledger: Ledger, exp: int, scenario: str, func: int, outcome: str) -> list[dict]:
+def _resolve_knockout_bets(ledger: Ledger, exp: int, scenario: str, func: int, outcome: str,
+                           audio_outcome: str | None = None) -> list[dict]:
     done = []
     for bet in ledger.con.execute("SELECT * FROM bets WHERE outcome IS NULL AND spec IS NOT NULL").fetchall():
         spec = json.loads(bet["spec"])
         if not spec.get("knockout") or spec.get("func") != func or spec.get("scenario") != scenario:
             continue
-        hit = spec.get("expect") == outcome
+        if spec.get("expect") in ("audible", "inaudible"):
+            if audio_outcome not in ("audible", "inaudible"):
+                continue                          # no sound to judge by: the bet stays open
+            hit = spec["expect"] == audio_outcome
+        else:
+            hit = spec.get("expect") == outcome
         try:
             brier = ledger.resolve_bet(bet["id"], hit, exp)
         except AlreadyResolved:
