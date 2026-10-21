@@ -47,9 +47,14 @@ class Model(BaseModel):
 
 
 # ---------------------------------------------------------------- halts
+WatchKind = Literal["write", "read", "access"]
+Attribution = Literal["pc", "stack"]
 class HaltSnapshot(Model):
-    """Everything captured when a breakpoint freezes the game at one function."""
-    func: FuncNum                                   # function number halted at
+    """Everything captured when a breakpoint freezes the game at one function.
+
+    ``func`` is None only when the game stopped outside mapped code (a driver,
+    DOS/4GW, DOS) and no mapped caller was found on the stack."""
+    func: FuncNum | None                            # function number halted at
     scenario: str                                   # save state / scenario name
     hits: int = Field(1, ge=0)                      # hits observed in the logging pass
     frames: int = Field(1, ge=0)                    # frames elapsed in that pass
@@ -63,6 +68,8 @@ class HaltSnapshot(Model):
     context: list[str] = Field(default_factory=list)          # scenario tags: docked, combat, ...
     trigger: str | None = None                      # input that preceded the hit, e.g. "F1"
     screenshot: str | None = None
+    pc: int | None = None                           # runtime EIP where it stopped
+    attributed_by: Literal["pc", "stack"] | None = None   # how ``func`` was found
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
@@ -79,6 +86,44 @@ class HaltSnapshot(Model):
 
 
 # ---------------------------------------------------------------- ledger records
+class Watch(Model):
+    """A memory watchpoint: stop when the game writes/reads ``length`` bytes at ``addr``.
+
+    ``addr`` is a runtime linear address. ``region`` optionally names what lives
+    there (a key of ``halt.RULES["region"]``, e.g. ``sample_data``); only then do
+    hits move beliefs."""
+    addr: int = Field(ge=0)
+    length: int = Field(1, ge=1, le=1 << 20)
+    kind: WatchKind = "write"
+    region: str | None = None
+
+
+class WatchHit(Model):
+    """One watchpoint stop: who touched the watched memory."""
+    func: FuncNum | None                            # None: unmapped code, no mapped caller found
+    pc: int
+    kind: WatchKind
+    addr: int                                       # address the stub reported
+    attributed_by: Attribution | None = None
+    stack: list[int] = Field(default_factory=list)
+
+
+FileVia = Literal["int21", "int31"]
+
+
+class FileAccess(Model):
+    """A DOS file call caught at the game's own ``int 21h`` / DPMI ``int 31h`` (AX=0300h, BL=21h)."""
+    func: FuncNum | None                            # nearest mapped FFE caller
+    pc: int
+    via: FileVia
+    dos_fn: int                                     # AH: 3Dh open, 3Fh read, ...
+    filename: str | None = None                     # for calls that take one
+    handle: int | None = None                       # BX, for handle calls
+    count: int | None = None                        # CX, bytes to read/write
+    attributed_by: Attribution | None = None
+    stack: list[int] = Field(default_factory=list)
+
+
 class Record(Model):
     """A row of one SQLite table. ``table`` names it; ``_json`` lists TEXT columns holding JSON."""
     table: ClassVar[str]
@@ -93,7 +138,7 @@ class Record(Model):
         return cls.model_validate(d)
 
 
-ExperimentKind = Literal["logging_pass", "halt", "knockout", "unicorn", "static_check"]
+ExperimentKind = Literal["logging_pass", "halt", "knockout", "watch", "file_access", "unicorn", "static_check"]
 
 
 class Experiment(Record):
@@ -116,7 +161,7 @@ class Experiment(Record):
 
 
 EvidenceKind = Literal["call", "static_callee", "static_graph_knn", "static_quotient", "log_hit", "log_miss", "halt", "halt_timeout",
-                       "knockout", "knockout_obs"]
+                       "knockout", "knockout_audio", "knockout_obs", "watch"]
 
 
 class Evidence(Record):
@@ -141,27 +186,30 @@ class Evidence(Record):
         return self.kind != "call" and not self.kind.startswith("static_")
 
 
+KNOCKOUT_EXPECTS = ("visible", "invisible", "crash", "audible", "inaudible")
+
+
 class BetSpec(Model):
     """Machine-checkable prediction.
 
     Logging-pass specs carry exactly one of ``expect`` (hit | miss), ``min_rate``
     or ``max_rate``. Knockout specs set ``knockout`` and expect visible |
-    invisible | crash."""
+    invisible | crash (the screen) or audible | inaudible (sound-card writes)."""
     scenario: str
     func: FuncNum
     knockout: bool = False
-    expect: Literal["hit", "miss", "visible", "invisible", "crash"] | None = None
+    expect: Literal["hit", "miss", "visible", "invisible", "crash", "audible", "inaudible"] | None = None
     min_rate: Probability | None = None
     max_rate: Probability | None = None
 
     @model_validator(mode="after")
     def _one_criterion(self):
         if self.knockout:
-            if self.expect not in ("visible", "invisible", "crash") or self.min_rate or self.max_rate:
-                raise ValueError("a knockout spec expects visible, invisible or crash")
+            if self.expect not in KNOCKOUT_EXPECTS or self.min_rate or self.max_rate:
+                raise ValueError("a knockout spec expects visible, invisible, crash, audible or inaudible")
             return self
         given = [x for x in (self.expect, self.min_rate, self.max_rate) if x is not None]
-        if len(given) != 1 or self.expect in ("visible", "invisible", "crash"):
+        if len(given) != 1 or self.expect in KNOCKOUT_EXPECTS:
             raise ValueError("a bet spec needs exactly one of expect (hit/miss), min_rate, max_rate")
         return self
 

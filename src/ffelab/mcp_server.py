@@ -19,6 +19,7 @@ from . import behavior
 from . import fe2ref
 from . import knockout as ko
 from . import labels as lbl
+from . import observe
 from . import propagate as prop
 from . import db as dbmod
 from .ledger import Ledger
@@ -276,9 +277,39 @@ def propagate_labels() -> dict:
 def run_knockout(scenario: str, func: int, keys: list[str] | None = None, settle_ms: int = 1500) -> dict:
     """Disable a function (patch entry to RET) and compare screenshots against two baselines.
     Returns health (ok/crashed/frozen), changed-pixel fraction, bbox and image paths.
-    If the outcome is 'visible', look at the diff image, then record_knockout_observation."""
+    If the outcome is 'visible', look at the diff image, then record_knockout_observation.
+    On QEMU it also counts sound-card port writes: audio_outcome is audible / inaudible /
+    no_audio (nothing playing in the baselines, so no verdict). For music, pass keys that
+    start or change it inside settle_ms (launch, dock, combat)."""
     return ko.knockout(backend(), _ledger, scenario, func, keys, settle_ms,
                        os.environ.get("FFELAB_KNOCKOUT_DIR", "knockouts"))
+
+
+@tool(mcp)
+def run_watch_pass(scenario: str, watches: list[dict], keys: list[str] | None = None,
+                   ms: int = 2000) -> dict:
+    """Memory watchpoints: which functions write/read these addresses while the game runs.
+    Each watch: {"addr": runtime address, "length": bytes, "kind": write|read|access,
+    "region": optional halt region name such as "sample_data" (only then do beliefs move)}.
+    Stops inside unmapped code (sound driver, DOS/4GW) are attributed to the nearest
+    mapped caller on the stack."""
+    from .models import Watch
+    return observe.watch_pass(backend(), _ledger, scenario, [Watch(**w) for w in watches], keys, ms)
+
+
+@tool(mcp)
+def run_file_access_pass(scenario: str, exe_path: str | None = None, keys: list[str] | None = None,
+                         ms: int = 3000) -> dict:
+    """Which FFE functions open/read which files: breakpoints on the exe's own int 21h /
+    int 31h sites decode DOS file calls. exe_path defaults to $FFELAB_EXE; the build's
+    address map comes from FFELAB_EMU's "binary". Records an experiment; moves no beliefs."""
+    import json
+    path = exe_path or os.environ.get("FFELAB_EXE")
+    if not path:
+        raise ValueError("give exe_path or set FFELAB_EXE to the FIRSTENC.EXE running in the emulator")
+    binary = json.loads(os.environ.get("FFELAB_EMU", "{}")).get("binary")
+    sites = observe.file_sites(_ledger, path, binary)
+    return observe.file_access_pass(backend(), _ledger, scenario, sites, keys, ms)
 
 
 @tool(mcp)

@@ -38,14 +38,14 @@ def make_backend(kind: str, db_path: str, emu: dict):
         visuals = {sc: [(f, (0, 8 * i, 319, 8 * i + 6), (200, 200, 200)) for i, f in enumerate(sorted(rates))]
                    for sc, rates in truth.items()}
         return FakeBackend(truth, visuals=visuals, crashers=set(emu.get("crashers", [])))
-    from ..exe import load_map
+    from ..exe import func_sizes, load_map
     from ..harness.emulator import EmulatorBackend, EmulatorConfig
     raw = dict(emu)
     binary = raw.pop("binary", None)
     con = dbmod.connect(db_path)
     pos = (load_map(con, binary, min_conf=0.7) if binary else
            {r["num"]: r["pos"] for r in con.execute("SELECT num,pos FROM functions WHERE pos IS NOT NULL")})
-    return EmulatorBackend(EmulatorConfig(**raw | {"kind": kind}), pos)
+    return EmulatorBackend(EmulatorConfig(**raw | {"kind": kind}), pos, func_sizes(con))
 
 
 def load_plan(path: str) -> CampaignPlan:

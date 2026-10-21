@@ -180,3 +180,37 @@ def run(con: sqlite3.Connection, exe_path: str | Path, force_map: bool = False) 
     store(con, bid, str(exe_path), report, rows)
     report["binary_id"] = bid
     return report
+
+
+# ---------------------------------------------------------------- unmapped code
+INT_OPCODES = {b"\xcd\x21": "int21", b"\xcd\x31": "int31"}
+
+
+def func_sizes(con: sqlite3.Connection) -> dict[int, int]:
+    """Upper bound on each function's length in bytes (MAX_INSN_BYTES x instructions)."""
+    from .harness.backend import MAX_INSN_BYTES
+    return {r["num"]: max(1, r["n_ins"] or 0) * MAX_INSN_BYTES
+            for r in con.execute("SELECT num, n_ins FROM functions WHERE pos IS NOT NULL")}
+
+
+def int_sites(data: bytes, positions: dict[int, int], sizes: dict[int, int]) -> dict[int, str]:
+    """Pos of every ``int 21h`` / ``int 31h`` byte pair in the code outside mapped functions.
+
+    JJ replaced FFE's C runtime and sound code with his own C, so ``ffe.asm`` has
+    no ``int`` instructions; in the original exe that code sits in the gaps
+    between mapped functions, and that is where DOS/4GW programs call DOS. Some
+    hits are data or the middle of another instruction; a breakpoint there just
+    never fires (QEMU's breakpoints don't patch memory)."""
+    spans = sorted((p, p + sizes.get(f, 1)) for f, p in positions.items())
+    starts = [s for s, _ in spans]
+    end = min(FCODEOFF + FCODESIZE + 0x20000, len(data))
+    out = {}
+    for pat, via in INT_OPCODES.items():
+        i = data.find(pat, FCODEOFF, end)
+        while i != -1:
+            pos = to_pos(i)
+            k = bisect.bisect_right(starts, pos) - 1
+            if k < 0 or pos >= spans[k][1]:
+                out[pos] = via
+            i = data.find(pat, i + 1, end)
+    return dict(sorted(out.items()))

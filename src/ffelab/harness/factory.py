@@ -19,11 +19,11 @@ def make_backend(kind: str, con: sqlite3.Connection, emu: dict | None = None) ->
         from .fake import FakeBackend
         names = [r["name"] for r in con.execute("SELECT name FROM scenarios")] or ["demo"]
         return FakeBackend({n: {} for n in names})
-    from ..exe import load_map
+    from ..exe import func_sizes, load_map
     from .emulator import EmulatorBackend, EmulatorConfig
     raw = dict(emu if emu is not None else json.loads(os.environ.get("FFELAB_EMU", "{}")))
     binary = raw.pop("binary", None)
     cfg = EmulatorConfig(**raw | {"kind": kind})
     pos = (load_map(con, binary, min_conf=0.7) if binary else
            {r["num"]: r["pos"] for r in con.execute("SELECT num,pos FROM functions WHERE pos IS NOT NULL")})
-    return EmulatorBackend(cfg, pos)
+    return EmulatorBackend(cfg, pos, func_sizes(con))

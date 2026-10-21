@@ -291,12 +291,72 @@ If all three work, bring-up is done; carry on with GETTING_STARTED Stage 3. If
 one fails, paste the error to Claude. The likely first fixes are key names
 and timings in `harness/emulator.py`.
 
+## 11. Beyond screenshots: memory, sound and files
+
+Screenshots can't tell apart code that draws nothing: music, file loading,
+state nobody displays. Three more observations cover that. None of them
+changes `run-ffe.sh`, so your save states stay valid.
+
+**Memory watchpoints.** "Who writes this address?" QEMU's debugger port
+stops the game when watched memory is written, read or accessed (any number
+of watchpoints, any length). Ask Claude for a watch pass:
+
+> "Watch writes to 0x2A4F00, 16 bytes, in docked while pressing F3, region stock_data."
+
+Each stop is credited to the function that touched the memory. If that was
+unmapped code (see below), the nearest FFE caller on the stack gets it. A
+`region` name from `halt.py`'s `RULES["region"]` (for example `sample_data`
+or `stock_data`) lets the hits move beliefs. Without one, the pass only
+records who touched what.
+
+**Sound in knockouts.** The GDB protocol has no breakpoints on I/O ports.
+Instead, during each knockout run ffelab switches on QEMU's
+`memory_region_ops_write` trace from the monitor and counts writes to the
+`sb16`, `adlib` and `pcspk` devices. The three runs (two baselines and the
+knockout) are compared the way the screenshots are, so the difference
+between the baselines is treated as noise. `audio_outcome` is
+`audible`, `inaudible`, or `no_audio` (nothing was playing in the baselines,
+so no verdict, and audio bets stay open). It says *that* the sound changed,
+not who wrote the port. Music runs off a timer interrupt, so a knockout only
+shows up if the music would have changed inside `settle_ms`: give music
+knockouts keys that start or switch it (requesting launch, docking, a fight
+starting). Set `"audio_trace": false` in `FFELAB_EMU` to turn the channel off.
+
+**DOS file calls.** "Which function loads which file?" FFE runs under
+DOS/4GW in a flat 32-bit model, and its C runtime still calls DOS with
+`int 21h` (or DPMI `int 31h`, function 0300h, for a real-mode call), which
+DOS/4GW handles. JJ replaced that runtime in `ffe.asm`, so ffelab scans your
+`FIRSTENC.EXE` for those instructions *outside* the mapped functions, puts a
+breakpoint on each, and decodes open/create (with the filename), read/write
+(handle and size), seek and close. Set `FFELAB_EXE` to the exe that's in the
+VM, then ask:
+
+> "Run a file access pass in docked while pressing F8."
+
+It records which FFE function asked for which file. It moves no beliefs: a
+filename's subsystem is your call, made as an observation or a claim.
+
+**Unmapped code.** The asm only covers FFE's own functions. The C runtime,
+the HMI sound code and DOS/4GW aren't in it. A function can't be longer than
+15 bytes (the longest x86 instruction) times its instruction count, so an
+address beyond that is treated as unmapped. Halts and watch hits there are
+credited to the nearest FFE caller found on the stack (`attributed_by:
+"stack"`), or to nobody. Before this, they were silently blamed on whichever
+function started just below.
+
+**Which boot entry.** Use the same FreeDOS boot-menu entry for every save
+state. The one without JEMMEX (HIMEM only, like the "XMS" setups FFE ran
+under in Windows 98's DOS mode) is the closest to the original. `info
+registers` on the monitor shows the game's privilege ring as the DPL on the
+CS line. It doesn't matter to the debugger, which works at any ring.
+
 ## Troubleshooting
 
 | Symptom | Try |
 |---|---|
 | FFE crashes or says it's out of memory at start | At the FreeDOS boot menu, pick the entry that doesn't load JEMMEX/EMM386; DOS extenders often clash with memory managers. Also try `-m 16`. |
-| No sound, or the game hangs at the sound setup | Re-run the game's sound setup with the SB16 values in step 5, or choose "no sound" for now: sound doesn't matter to ffelab. |
+| No sound, or the game hangs at the sound setup | Re-run the game's sound setup with the SB16 values in step 5, or choose "no sound" for now. Everything except the sound channel of knockouts (step 11) works without it. |
+| Knockouts always say `audio_outcome: null` | Your QEMU was built without the `log` trace backend: `ffelab emu monitor "log trace:memory_region_ops_write"` prints a help line instead of nothing (if it prints nothing, it worked: run `ffelab emu monitor "log none"` to switch it off again). Upstream's default build has it; a build without it needs QEMU rebuilt with `--enable-trace-backends=log`. |
 | `savevm` says a device "does not support snapshots" | A writable disk isn't qcow2 (often the game-folder drive from step 3 is still in the command line). Use only `run-ffe.sh`. |
 | `loadvm` fails after editing `run-ffe.sh` | The hardware no longer matches. Undo the edit, or remake the save states. |
 | `calibrate` can't connect | QEMU isn't running with `run-ffe.sh`, or Claude Code's ffelab server is attached to port 1234. Close it and retry. |
