@@ -158,6 +158,16 @@ CREATE TABLE IF NOT EXISTS embeddings (
     created TEXT DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (func, model)
 );
+-- the Zig engine (bridge.py): design proposals, never evidence --------------
+CREATE TABLE IF NOT EXISTS bridges (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ffe TEXT,                     -- FUNC_n | DATA_n | seg:N | label path
+    zig TEXT,                     -- path or path:symbol in the Zig repo (may not exist yet)
+    relation TEXT,                -- replaces | wraps | stubs | calls_into | reads | mirrors
+    status TEXT,                  -- proposed | accepted | in_progress | done | rejected (human sets)
+    note TEXT, source TEXT,
+    created TEXT DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 # indexes on columns that MIGRATIONS may have just added

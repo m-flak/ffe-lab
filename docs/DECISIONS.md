@@ -236,6 +236,30 @@ there go to the nearest mapped caller on the stack, or to nobody.
 a TCG plugin or the `wav` audio backend), or port-write counts prove too
 noisy to separate music from sound effects (then per-port histograms).
 
+### D19. The researcher reads the Zig engine; links are proposals, not evidence
+Matthew's sokol-zig engine will host some of FFE and replace the rest, and he
+wants Muse to help weave the two together from inside `ffelab.mcp_research`.
+So that server gains read-only tools over the engine's repo (`FFELAB_ZIG_ROOT`,
+confined to that directory), a `subsystem` view of FFE as a box to cut out
+(entry points, outside calls, shared and private data, member beliefs),
+`cut_check` (for one function: what it reaches, sorted into presentation vs game
+logic by belief, and which data it writes that logic code reads; verdict gut /
+split / keep / unsure, a prediction only a knockout settles), `seam` (ffed3d's
+`EXTERN`s, the asm's calls out to C/C++, with FFE callers and ffed3d's C++ for
+each; Matthew builds on ffed3d's asm because its `C_*` render ports show where
+a modern renderer plugs in), and
+`link`: a proposed FFE <-> Zig connection with a relation and a note.
+*Why a separate table:* how to build the engine is a design choice, not a fact
+about FFE, so links never move beliefs or count as evidence, and Zig code is
+never a basis for a claim. Matthew sets a link's status; the researcher can
+only propose. Subsystem membership follows current beliefs and is shown with
+them, so an uncertain boundary looks uncertain.
+*Why reading, not writing, the Zig repo:* the researcher advises; Matthew (or
+his own coding agent in that repo) edits it.
+*Would change if:* links start needing tests (then a difftest experiment kind
+that checks a Zig replacement against the asm, which *would* be evidence), or
+the regex outline misses too much (then `zig ast-check` / ZLS for symbols).
+
 ---
 
 ## Open questions
