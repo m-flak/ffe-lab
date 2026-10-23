@@ -21,6 +21,7 @@ things should happen.
 | v0.5 | Durable experiment campaigns on Temporal (`python -m ffelab.workflows`) |
 | v0.5 | Call-graph structure (`ffelab graph`): spectral basis, call layers, label quotient |
 | v0.5 | Docker Compose for the optional servers (`docs/DOCKER.md`); day-to-day guide (`docs/USAGE.md`) |
+| v0.5 | Zig engine bridge for the researcher: read-only Zig repo tools, `subsystem` boxes, FFE <-> Zig link proposals (D19) |
 | v0.5 | Asset formats: bitmap table and mesh display lists decoded, `tools/meshwalk.py` dumps OBJs (`docs/ASSET_FORMATS.md`); unverified against the running game |
 
 ---
@@ -193,4 +194,7 @@ hit counters instead of breakpoints, knockouts as source edits). Windows VM only
   test (original asm vs C port on the same inputs).
 - **Long-term host idea.** Zig host + Unicorn running the original asm,
   Vulkan/Metal presentation, incremental replacement of understood functions
-  (OpenRCT2-style). Real blocker is 32-bit x86, not the renderer. Not started.
+  (OpenRCT2-style). Real blocker is 32-bit x86, not the renderer. Matthew is
+  starting it as a sokol-zig engine; Muse helps through the bridge tools (D19).
+  Next, if wanted: a Unicorn difftest that checks a Zig replacement against
+  the asm on recorded inputs, as an experiment kind.

@@ -36,7 +36,8 @@ client's MCP config, with full paths:
 
 The source is fixed in that config, so the agent can't claim under another
 name. Tools: `view`, `data_refs`, `grep_asm`, `uncertain`, `similar_functions`,
-`quotient_outliers`, `vocabulary`, `my_claims`, `claim`. Don't give a
+`quotient_outliers`, `vocabulary`, `subsystem`, `my_claims`, `claim`, plus the
+Zig engine tools below when `FFELAB_ZIG_ROOT` is set. Don't give a
 researcher the full `ffelab.mcp_server`: it has the experiment and bet tools.
 
 **CLI:**
@@ -124,3 +125,46 @@ Write prose findings (formats, tables, open questions) into `docs/`, the way
 `ASSET_FORMATS.md` was written; claims go in the ledger. After a batch of
 claims, the human re-runs `ffelab graph vote` so names spread to neighbours as
 static evidence.
+
+## Frankensteining: the Zig engine
+
+Matthew is writing a new engine in Zig (sokol-zig) that hosts parts of FFE and
+replaces others. With `"FFELAB_ZIG_ROOT": "/full/path/to/engine"` added to the
+server's `env`, the same researcher can read that repo next to FFE and help
+decide how the two fit together.
+
+| tool | what you get |
+|---|---|
+| `subsystem(spec)` | an FFE subsystem (`seg:12`, `render`, `render/planet`) as a box to cut out: members and their belief, **entry points** called from outside (its real API, a first draft of the Zig interface), what it calls outside itself, **shared data** (coupling to design around) and private data (can become Zig-owned state) |
+| `zig_tree`, `zig_read`, `zig_grep`, `zig_outline` | the engine's source, read only, confined to the root; `.zig-cache` and `zig-out` skipped |
+| `link(ffe, zig, relation, note)` | propose how an FFE piece meets the Zig code |
+| `links(...)` | the proposals so far and where Matthew stands on them |
+
+CLI: `ffelab research subsystem SPEC`, `ffelab research link FFE ZIG RELATION
+--note TEXT [--zig-root DIR]`, `ffelab bridge list`, and (Matthew only)
+`ffelab bridge status ID accepted|in_progress|done|rejected`.
+
+**Relations:** `replaces` (Zig code takes over the FFE piece), `wraps` (Zig
+calls the FFE code, emulated, behind a Zig interface), `stubs` (gutted: Zig
+returns a fixed answer), `calls_into` (the Zig engine needs to call this FFE
+code), `reads` (Zig reads this FFE data directly), `mirrors` (a Zig type or
+constant that must match FFE's layout or values).
+
+**How to answer "how do I fit this subsystem in cleanly?"**
+1. `subsystem` on it. Weak members (belief under 0.7) mean the box itself is
+   uncertain: say so before designing around it.
+2. Entry points are what the Zig side must call or provide; shared data is
+   what both sides touch and needs one owner.
+3. Read the Zig code that would meet it (`zig_grep`, `zig_outline`).
+4. Propose `link`s, one per seam, each with a note saying what changes on
+   which side. Give the overall recommendation to Matthew in prose.
+
+**Rules:**
+- Links are design proposals, not findings about FFE. They live in their own
+  table and never move beliefs, bets or evidence. Status starts at `proposed`;
+  only Matthew moves it.
+- The Zig code is Matthew's design, so it is never a basis for a claim about
+  what FFE does. If reading it alongside the asm teaches you something about
+  FFE, make an ordinary claim whose basis cites the asm.
+- Say how sure you are. A link that rests on a weak member or an unlabelled
+  callee says so in its note.

@@ -54,8 +54,13 @@
   ffelab research claim FUNC LABEL -c P --basis TEXT [--source ai:muse]
   ffelab research import CLAIMS.jsonl [--source ai:muse]
   ffelab research retag OLD_SOURCE NEW_SOURCE
+  ffelab research subsystem SPEC [--min-prob 0.5]          (SPEC: seg:N or a label path)
+  ffelab research link FFE ZIG RELATION --note TEXT [--zig-root DIR] [--source ai:muse]
       static research (docs/STATIC_RESEARCH.md): read freely, write claims only;
       --source defaults to $FFELAB_SOURCE
+  ffelab bridge list [--ffe REF] [--zig PATH] [--status S]
+  ffelab bridge status ID proposed|accepted|in_progress|done|rejected
+      FFE <-> Zig engine links (design proposals, never evidence; docs/STATIC_RESEARCH.md)
 
 --db takes a SQLite file or a postgresql:// URL, and defaults to $FFELAB_DB, else ffe.db.
 """
@@ -240,11 +245,23 @@ def main(argv=None):
     for p in (rc, ri):
         p.add_argument("--source", default=src_default, required=src_default is None)
     rt = rs.add_parser("retag"); rt.add_argument("old"); rt.add_argument("new")
-    for p in (rv, rr, rg, rc, ri, rt):
+    rsub = rs.add_parser("subsystem"); rsub.add_argument("spec"); rsub.add_argument("--min-prob", type=float, default=0.5)
+    rl = rs.add_parser("link"); rl.add_argument("ffe"); rl.add_argument("zig"); rl.add_argument("relation")
+    rl.add_argument("--note", required=True, help="why these meet, and what has to change")
+    rl.add_argument("--zig-root", default=os.environ.get("FFELAB_ZIG_ROOT"))
+    rl.add_argument("--source", default=src_default, required=src_default is None)
+    for p in (rv, rr, rg, rc, ri, rt, rsub, rl):
+        p.add_argument("--db", default=DEFAULT_DB)
+    bg = sub.add_parser("bridge").add_subparsers(dest="bridge_cmd", required=True)
+    bl = bg.add_parser("list"); bl.add_argument("--ffe"); bl.add_argument("--zig"); bl.add_argument("--status")
+    bs = bg.add_parser("status"); bs.add_argument("id", type=int); bs.add_argument("status")
+    for p in (bl, bs):
         p.add_argument("--db", default=DEFAULT_DB)
     a = ap.parse_args(argv)
     if a.cmd == "research":
         return research_cmd(a)
+    if a.cmd == "bridge":
+        return bridge_cmd(a)
     if a.cmd == "eval":
         return eval_cmd(a)
     if a.cmd == "agents":
@@ -337,8 +354,28 @@ def research_cmd(a) -> int:
             r = rs.claim(led, rs.func_num(a.func), a.label, a.confidence, a.source, a.basis)
         elif a.research_cmd == "import":
             r = rs.import_claims(led, a.file, a.source)
+        elif a.research_cmd == "subsystem":
+            from . import bridge as br
+            r = br.subsystem(led, a.spec, a.min_prob)
+        elif a.research_cmd == "link":
+            from . import bridge as br
+            r = br.link(led, a.ffe, a.zig, a.relation, a.note, a.source,
+                        br.ZigRepo(a.zig_root) if a.zig_root else None)
         else:
             r = rs.retag(led.con, a.old, a.new)
+    except (ValueError, KeyError) as e:
+        print(f"refused: {e}")
+        return 1
+    print(json.dumps(r, indent=2))
+    return 0
+
+
+def bridge_cmd(a) -> int:
+    from . import bridge as br
+    con = dbmod.connect(a.db)
+    try:
+        r = (br.links(con, a.ffe, a.zig, a.status) if a.bridge_cmd == "list"
+             else br.set_status(con, a.id, a.status))
     except (ValueError, KeyError) as e:
         print(f"refused: {e}")
         return 1
