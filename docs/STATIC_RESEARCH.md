@@ -36,8 +36,9 @@ client's MCP config, with full paths:
 
 The source is fixed in that config, so the agent can't claim under another
 name. Tools: `view`, `data_refs`, `grep_asm`, `uncertain`, `similar_functions`,
-`quotient_outliers`, `vocabulary`, `subsystem`, `my_claims`, `claim`, plus the
-Zig engine tools below when `FFELAB_ZIG_ROOT` is set. Don't give a
+`quotient_outliers`, `vocabulary`, `subsystem`, `cut_check`, `my_claims`, `claim`,
+`links`, `link`, plus `seam` when `FFELAB_FFED3D_ROOT` is set and the `zig_*`
+tools when `FFELAB_ZIG_ROOT` is set (see "Frankensteining" below). Don't give a
 researcher the full `ffelab.mcp_server`: it has the experiment and bet tools.
 
 **CLI:**
