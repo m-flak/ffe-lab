@@ -62,10 +62,12 @@ Think of it as a lab notebook with a referee.
 | **Evidence** | Anything that moves a belief: an experiment result, a call, a propagated hint. |
 | **Call / claim** | Someone (you, an AI) says "FUNC X is label Y, Z% sure". Recorded as a bet. |
 | **Bet** | A prediction with a probability. Settled later by an experiment, then scored. |
-| **Experiment** | A real run of the game: a logging pass, a halt, or a knockout. Only experiments settle bets. |
+| **Experiment** | A real run of the game: a logging pass, a halt, a knockout, a watch pass or a file-access pass. Only experiments settle bets. |
 | **Logging pass** | Load a save state, count how often each of many functions runs. Cheap, broad. |
 | **Halt** | Freeze the game at one function and capture the call stack, registers and arguments. Detailed, narrow. |
-| **Knockout** | Make a function return immediately, replay, and compare screenshots. Shows what it does by what disappears. |
+| **Knockout** | Make a function return immediately, replay, and compare screenshots and sound. Shows what it does by what disappears. |
+| **Watch pass** | Put memory watchpoints on some addresses and record which functions read or write them. |
+| **File-access pass** | Break on the game's DOS file calls and record which function opened which file. |
 | **Fingerprint** | A function's activity in each scenario (silent / rare / regular / per-frame). |
 | **Behaviour group** | Functions with matching fingerprints: a subsystem found before it has a name. |
 | **Propagation** | Unknown functions picking up weak hints from the labels of functions they call. |
@@ -76,7 +78,9 @@ Think of it as a lab notebook with a referee.
 | **Calibration** | Whether your 90%-sure claims are right about 90% of the time. |
 | **Reliability** | A 0–1 score per person/agent (and per subsystem) derived from their Brier scores. Scales how much their calls count. |
 | **AUC** | For the segment map: pick a real file boundary and a non-boundary at random; AUC is how often the model scores the real one higher. 0.5 = guessing, 1.0 = perfect. Currently 0.81. |
-| **MCP** | Model Context Protocol: the standard way to give an AI agent tools. ffelab runs an MCP server exposing ~35 tools to Claude. |
+| **MCP** | Model Context Protocol: the standard way to give an AI agent tools. ffelab has two MCP servers: `ffelab.mcp_server` (36 tools, experiments included) for your agents, and `ffelab.mcp_research` (read tools, claims and links only) for an outside researcher. |
+| **Link** | A proposed connection between an FFE piece and the Zig engine ("Zig `gfx.drawTri` replaces FUNC_001616"). A design proposal, never evidence. |
+| **Seam** | A place where ffed3d's asm calls out to C/C++ (an `EXTERN`), e.g. the `C_*` render ports. Where a modern renderer plugs in. |
 | **Scenario** | A named emulator save state (e.g. `orbit_atmo`) with tags describing it. |
 
 ---
@@ -276,7 +280,7 @@ No emulator needed. You read code and make calls; the AI assists.
 
 **An outside researcher** (Muse today) works the same phase from the command
 line or through its own MCP server (`python -m ffelab.mcp_research`, read
-tools plus `claim` and nothing else): it reads with `ffelab research view /
+tools plus `claim` and `link` and nothing else): it reads with `ffelab research view /
 refs / grep` and writes only claims with `ffelab research claim`. Hand it
 `docs/STATIC_RESEARCH.md` as its brief; it has the MCP config too.
 
@@ -284,6 +288,32 @@ refs / grep` and writes only claims with `ffelab research claim`. Hand it
 about 160 FFE functions to glFrontier's labelled 68k disassembly, by shared
 tables and constants. The matches are hints shown by `belief`, never evidence.
 `docs/REFERENCES.md` says where to get `fe2.s`.
+
+**Planning the Zig engine** (optional): the same researcher server can read
+your sokol-zig engine next to FFE. Add `"FFELAB_ZIG_ROOT"` (the engine repo)
+and `"FFELAB_FFED3D_ROOT"` (your ffed3d checkout, e.g. `~/re/ffed3d`) to its
+`env` in `.mcp.json`; the README's "Hooking up an agent" has the full block.
+Then:
+
+| You want to… | Say something like… |
+|---|---|
+| See a subsystem as a part to cut out | "Show `subsystem` for `render/planet`: entry points, shared data, and which members are shaky." |
+| Check before gutting a function | "Run `cut_check` on 1616. Can it be gutted for the new UI, or does it touch game logic?" |
+| See where rendering hands off | "List the `render_port` seams, then show `seam C_DrawTexTriangleDet`." |
+| Get a plan | "How should the planet renderer meet my engine's renderer? Propose links, one per seam." |
+
+The researcher can only *propose* links. Review them and set each one's status
+yourself:
+
+```bash
+ffelab bridge list --status proposed
+ffelab bridge status 3 accepted        # or in_progress / done / rejected
+```
+
+Links live in their own `bridges` table (added to an existing `ffe.db` or
+Postgres store the first time it's opened) and never move beliefs or settle
+bets. A `cut_check` verdict is a prediction; a knockout settles it. Rules and
+the full protocol: `docs/STATIC_RESEARCH.md` ("Frankensteining: the Zig engine").
 
 **Tips:**
 - **Be honest with confidence.** 60% is a perfectly good call. Your accuracy is
@@ -465,6 +495,12 @@ Built, each with its own page:
 - **Static research** by an outside agent, claims only (`ffelab research`,
   `ffelab.mcp_research`). `docs/STATIC_RESEARCH.md`.
 - **Frontier: Elite II reference matches** (`ffelab ref`). `docs/REFERENCES.md`.
+- **Observation beyond screenshots**: watch passes (`run_watch_pass`), sound
+  as a knockout channel, and file-access passes (`run_file_access_pass`).
+  `docs/EMULATOR.md` section 11.
+- **The Zig engine bridge**: `subsystem`, `cut_check`, `seam`, the `zig_*`
+  read tools and proposed links (`ffelab bridge`). Stage 1 above and
+  `docs/STATIC_RESEARCH.md`.
 - **Game asset formats**: bitmaps and the 465-model mesh table, with
   `python3 tools/meshwalk.py all --src ~/re/ffed3d` dumping meshes as OBJ
   files. `docs/ASSET_FORMATS.md`. Not yet checked against the running game.
@@ -505,6 +541,9 @@ the hands-on work (it's the one with the tools and the game).
 | `ffelab: command not found` | `source .venv/bin/activate` first |
 | Claude Code shows no ffelab tools | Check `.mcp.json` uses full paths; restart Claude Code |
 | `ModuleNotFoundError: mcp` | `pip install -e ".[agent]"` |
+| `mcp_research` exits with "set FFELAB_SOURCE" | Add `"FFELAB_SOURCE": "ai:<name>"` to its `env`; it must start with `ai:` |
+| `zig_*` tools say "no Zig engine configured" | Add `"FFELAB_ZIG_ROOT"` to the research server's `env` and restart Claude Code |
+| `seam` says "no ffed3d checkout configured" | Add `"FFELAB_FFED3D_ROOT"` (or `--ffed3d DIR` on the CLI) |
 | "Postgres support needs psycopg" | `pip install -e ".[pg]"` |
 | `connection refused` on a `postgresql://` URL | `brew services start postgresql@17` |
 | `db copy` says "destination is not empty" | It never merges; empty the database first (4.4, "start over") |
