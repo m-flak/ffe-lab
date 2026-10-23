@@ -97,6 +97,53 @@ class TestSubsystem(unittest.TestCase):
             br.members(led, "nonsense")
 
 
+def make_cut_ledger():
+    """6 draws a screen and stores a price that economy FUNC 8 reads -> split.
+    7 only draws and writes a UI-only flag -> gut. 8 is economy logic -> keep."""
+    con = fresh_db()
+    asm = {
+        5: "call _C_DrawQuad\nret",                                                  # render helper
+        6: "call FUNC_000005\nmov [DATA_000020],eax\nmov eax,[DATA_000021]\nret",
+        7: "call FUNC_000005\nnot byte [DATA_000022]\nret",
+        8: "mov eax,[DATA_000020]\nret",
+    }
+    con.executemany("INSERT INTO functions (num,pos,ord,name,n_ins,asm_text) VALUES (?,?,?,?,?,?)",
+                    [(n, 0x1000 + 16 * n, n, None, 3, a) for n, a in asm.items()])
+    con.executemany("INSERT INTO calls VALUES (?,?,?)", [(6, 5, "direct"), (7, 5, "direct"), (9, 6, "direct")])
+    con.executemany("INSERT INTO data_refs VALUES (?,?)", [(6, 20), (6, 21), (7, 22), (8, 20)])
+    led = Ledger(con)
+    for f, lab in [(5, "render"), (8, "economy")]:
+        dist = {lab2: 0.01 for lab2 in led.labels}
+        dist[lab] = 0.9
+        led._store(f, dist)
+    con.commit()
+    return led
+
+
+class TestCutCheck(unittest.TestCase):
+    def test_data_access(self):
+        acc = br.data_access("mov [DATA_000001],eax\nmov eax,[DATA_000002]\nnot byte [DATA_000003]\n"
+                             "mov [edx*4+DATA_000004],ecx\ncmp dword [DATA_000005],0\npush dword DATA_000006\n"
+                             "lea esi,[DATA_000007+4]\ncall near [DATA_000008]    ; FUNC_001440_X")
+        self.assertEqual(acc, {1: "write", 2: "read", 3: "write", 4: "write", 5: "read",
+                               6: "addr", 7: "addr", 8: "read"})
+
+    def test_verdicts(self):
+        led = make_cut_ledger()
+        split = br.cut_check(led, 6)
+        self.assertEqual(split["verdict"], "split")
+        self.assertEqual(split["data_writes"][0]["logic_readers"], ["FUNC_000008"])
+        self.assertEqual(split["data_reads"], ["DATA_000021"])
+        self.assertEqual(br.cut_check(led, 7)["verdict"], "gut")
+        self.assertEqual(br.cut_check(led, 8)["verdict"], "keep")
+        self.assertEqual(br.cut_check(led, 5)["externs"], ["_C_DrawQuad"])
+
+    def test_unlabelled_callees_make_it_unsure(self):
+        led = make_cut_ledger()
+        led.con.execute("DELETE FROM beliefs WHERE func=5")
+        self.assertEqual(br.cut_check(led, 7)["verdict"], "unsure")
+
+
 class TestLinks(unittest.TestCase):
     def test_link_is_a_proposal_outside_the_ledger(self):
         led = make_ledger()

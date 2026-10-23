@@ -112,6 +112,15 @@ def subsystem(spec: str, min_prob: float = 0.5) -> dict:
     return _refusing(br.subsystem, _ledger, spec, min_prob)
 
 
+@tool(mcp)
+def cut_check(func: str, min_prob: float = 0.5) -> dict:
+    """Before gutting or modifying a function for the new engine: its callers, callees sorted
+    into presentation / logic / neutral / unknown, externs, data it reads and data it writes
+    (and who in game logic reads those). Verdict gut | split | keep | unsure, a static
+    prediction a knockout settles. Check this before proposing a ``stubs`` link."""
+    return _refusing(lambda: br.cut_check(_ledger, rs.func_num(func), min_prob))
+
+
 # ---------------------------------------------------------------- the Zig engine (read only)
 @tool(mcp)
 def zig_tree(path: str = "", glob: str = "*") -> list | dict:

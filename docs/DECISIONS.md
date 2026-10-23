@@ -241,7 +241,10 @@ Matthew's sokol-zig engine will host some of FFE and replace the rest, and he
 wants Muse to help weave the two together from inside `ffelab.mcp_research`.
 So that server gains read-only tools over the engine's repo (`FFELAB_ZIG_ROOT`,
 confined to that directory), a `subsystem` view of FFE as a box to cut out
-(entry points, outside calls, shared and private data, member beliefs), and
+(entry points, outside calls, shared and private data, member beliefs),
+`cut_check` (for one function: what it reaches, sorted into presentation vs game
+logic by belief, and which data it writes that logic code reads; verdict gut /
+split / keep / unsure, a prediction only a knockout settles), and
 `link`: a proposed FFE <-> Zig connection with a relation and a note.
 *Why a separate table:* how to build the engine is a design choice, not a fact
 about FFE, so links never move beliefs or count as evidence, and Zig code is

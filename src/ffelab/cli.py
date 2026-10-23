@@ -55,6 +55,7 @@
   ffelab research import CLAIMS.jsonl [--source ai:muse]
   ffelab research retag OLD_SOURCE NEW_SOURCE
   ffelab research subsystem SPEC [--min-prob 0.5]          (SPEC: seg:N or a label path)
+  ffelab research cut-check FUNC [--min-prob 0.5]          (gut | split | keep | unsure, static)
   ffelab research link FFE ZIG RELATION --note TEXT [--zig-root DIR] [--source ai:muse]
       static research (docs/STATIC_RESEARCH.md): read freely, write claims only;
       --source defaults to $FFELAB_SOURCE
@@ -246,11 +247,12 @@ def main(argv=None):
         p.add_argument("--source", default=src_default, required=src_default is None)
     rt = rs.add_parser("retag"); rt.add_argument("old"); rt.add_argument("new")
     rsub = rs.add_parser("subsystem"); rsub.add_argument("spec"); rsub.add_argument("--min-prob", type=float, default=0.5)
+    rcut = rs.add_parser("cut-check"); rcut.add_argument("func"); rcut.add_argument("--min-prob", type=float, default=0.5)
     rl = rs.add_parser("link"); rl.add_argument("ffe"); rl.add_argument("zig"); rl.add_argument("relation")
     rl.add_argument("--note", required=True, help="why these meet, and what has to change")
     rl.add_argument("--zig-root", default=os.environ.get("FFELAB_ZIG_ROOT"))
     rl.add_argument("--source", default=src_default, required=src_default is None)
-    for p in (rv, rr, rg, rc, ri, rt, rsub, rl):
+    for p in (rv, rr, rg, rc, ri, rt, rsub, rcut, rl):
         p.add_argument("--db", default=DEFAULT_DB)
     bg = sub.add_parser("bridge").add_subparsers(dest="bridge_cmd", required=True)
     bl = bg.add_parser("list"); bl.add_argument("--ffe"); bl.add_argument("--zig"); bl.add_argument("--status")
@@ -357,6 +359,9 @@ def research_cmd(a) -> int:
         elif a.research_cmd == "subsystem":
             from . import bridge as br
             r = br.subsystem(led, a.spec, a.min_prob)
+        elif a.research_cmd == "cut-check":
+            from . import bridge as br
+            r = br.cut_check(led, rs.func_num(a.func), a.min_prob)
         elif a.research_cmd == "link":
             from . import bridge as br
             r = br.link(led, a.ffe, a.zig, a.relation, a.note, a.source,

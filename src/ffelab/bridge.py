@@ -9,6 +9,9 @@ Three parts:
 - ``subsystem``: FFE seen as a box to cut out: its members, the entry points the
   rest of the game calls, what it calls outside itself, and the data it shares.
   Every member carries its belief, so a shaky boundary looks shaky.
+- ``cut_check``: before gutting or modifying a function for the new UI, what it
+  reaches (presentation vs game logic), which data it reads and *writes*, and
+  whether it looks safe to gut, needs splitting, or should stay.
 - links (the ``bridges`` table): how an FFE function, data label, segment or
   label should meet the Zig code ("Zig ``gfx.drawTri`` replaces FUNC_001616").
   These are design proposals, not findings about FFE: they never touch beliefs,
@@ -16,6 +19,7 @@ Three parts:
 """
 from __future__ import annotations
 
+import json
 import re
 from collections import defaultdict
 from fnmatch import fnmatch
@@ -195,6 +199,166 @@ def subsystem(ledger: Ledger, spec: str, min_prob: float = 0.5, limit: int = 40)
         "private_data": [f"DATA_{d:06d}" for d in private][:limit],
         "note": "membership follows current beliefs (not settled unless experiments say so); "
                 "data sharing is from code references, so pointer-passed data is missed",
+    }
+
+
+# ---------------------------------------------------------------- cut check
+# Mnemonics whose first operand is written (two-operand forms) or whose only operand is.
+WRITES_DEST = {"mov", "add", "sub", "and", "or", "xor", "adc", "sbb", "shl", "shr", "sal", "sar",
+               "rol", "ror", "rcl", "rcr", "xchg", "xadd", "cmpxchg", "bts", "btr", "btc",
+               "not", "neg", "inc", "dec", "pop", "fst", "fstp", "fist", "fistp", "fnstsw", "fnstcw"}
+DATA_IN_RE = re.compile(r"\b_?DATA_(\d+)")
+
+PRESENTATION = {"render", "ui", "audio", "platform", "text"}   # what the new engine redraws or replaces
+LOGIC = {"physics", "ai", "mission", "economy", "sysgen"}       # what has to survive a cut
+# math, io and unknown count as neither: shared helpers or not yet known
+PRESENT_NAMES = re.compile(r"^(Draw|Blit|Bmp|Text|Persist|Video|Gui|Console|DPal|Sound|Keyb|Mouse|Ptr|"
+                           r"ScrnShot|Clear|Enable|Disable|Update|SetPtr|String)")
+PRESENT_EXTERNS = re.compile(r"^_(C_|Video|Input|Timer|Sound|Dir|BlitClip|FillAvi|ResetAvi|RadarCargo)")
+EXTERN_CALL_RE = re.compile(r"^(?:call|jmp)\s+(?:near\s+)?(_(?!FUNC_|DATA_)[A-Za-z]\w*)")
+
+
+def _operands(ins: str) -> tuple[str, list[str]]:
+    ins = ins.split(";")[0].strip()
+    if not ins:
+        return "", []
+    parts = ins.split(None, 1)
+    ops, depth, cur = [], 0, ""
+    for ch in parts[1] if len(parts) > 1 else "":
+        if ch == "," and depth == 0:
+            ops.append(cur.strip()); cur = ""
+            continue
+        depth += ch == "["; depth -= ch == "]"
+        cur += ch
+    if cur.strip():
+        ops.append(cur.strip())
+    return parts[0].lower(), ops
+
+
+def data_access(asm_text: str) -> dict[int, str]:
+    """Per data label a function mentions: ``read``, ``write`` (a store into it, which may
+    also read), or ``addr`` (its address is taken, so a callee may write through it).
+    Indexed stores (``[edx*4+DATA_x]``) count as writes to the table at ``DATA_x``."""
+    out: dict[int, str] = {}
+    rank = {"read": 0, "addr": 1, "write": 2}
+
+    def mark(d: int, how: str):
+        if d not in out or rank[how] > rank[out[d]]:
+            out[d] = how
+
+    for ln in (asm_text or "").splitlines():
+        op, ops = _operands(ln)
+        for i, o in enumerate(ops):
+            for m in DATA_IN_RE.finditer(o):
+                d = int(m.group(1))
+                if "[" not in o:                                   # bare label: an address, not a load
+                    mark(d, "addr")
+                elif i == 0 and op in WRITES_DEST:
+                    mark(d, "write")
+                else:
+                    mark(d, "read")
+        if op == "lea":
+            for m in DATA_IN_RE.finditer(" ".join(ops[1:])):
+                mark(int(m.group(1)), "addr")
+    return out
+
+
+def _access_index(ledger: Ledger) -> dict[int, dict[int, str]]:
+    """func -> {data: read|write|addr}, parsed once per ledger."""
+    idx = getattr(ledger, "_bridge_access", None)
+    if idx is None:
+        idx = {r["num"]: data_access(r["asm_text"]) for r in
+               ledger.con.execute("SELECT num, asm_text FROM functions")}
+        ledger._bridge_access = idx
+    return idx
+
+
+def side(ledger: Ledger, func: int, min_prob: float = 0.5) -> tuple[str, str]:
+    """``presentation`` | ``logic`` | ``neutral`` | ``unknown``, and why."""
+    r = ledger.con.execute("SELECT name FROM functions WHERE num=?", (func,)).fetchone()
+    name = (r["name"] if r else None) or ""
+    b = ledger.belief(func)
+    top = max(b, key=b.get)
+    if b[top] >= min_prob:
+        how = "presentation" if top in PRESENTATION else "logic" if top in LOGIC else "neutral"
+        return how, f"belief {top}@{b[top]:.2f}"
+    if name and PRESENT_NAMES.match(name):
+        return "presentation", f"name {name}"
+    return "unknown", f"no belief over {min_prob} (top {top}@{b[top]:.2f})"
+
+
+def cut_check(ledger: Ledger, func: int, min_prob: float = 0.5) -> dict:
+    """What gutting or modifying ``func`` would cost.
+
+    Verdicts (a static prediction, settled only by a knockout on the emulator):
+    ``gut`` presentation only: it draws, calls nothing on the logic side, and writes
+    nothing logic code reads. ``split`` it draws *and* touches game logic or game state:
+    move the logic out before gutting the drawing. ``keep`` game logic with no drawing.
+    ``unsure`` too much it reaches has no label yet; the reasons say what."""
+    con = ledger.con
+    row = con.execute("SELECT num, asm_text FROM functions WHERE num=?", (func,)).fetchone()
+    if row is None:
+        raise KeyError(f"no FUNC {func}")
+    idx = _access_index(ledger)
+    callees = [r["callee"] for r in con.execute(
+        "SELECT DISTINCT callee FROM calls WHERE caller=? ORDER BY callee", (func,))]
+    externs = sorted({m.group(1) for ln in (row["asm_text"] or "").splitlines()
+                      if (m := EXTERN_CALL_RE.match(ln.strip()))})
+    sides = {c: side(ledger, c, min_prob) for c in callees}
+    own = side(ledger, func, min_prob)
+
+    readers: dict[int, set[int]] = defaultdict(set)
+    for f, acc in idx.items():
+        for d, how in acc.items():
+            if how in ("read", "write"):
+                readers[d].add(f)
+    access = idx.get(func, {})
+    writes = []
+    for d, how in sorted(access.items()):
+        if how == "read":
+            continue
+        others = readers[d] - {func}
+        logic_readers = [o for o in others if side(ledger, o, min_prob)[0] == "logic"]
+        writes.append({"data": f"DATA_{d:06d}", "how": how, "other_readers": len(others),
+                       "logic_readers": [_name(con, o) for o in sorted(logic_readers)[:5]]})
+
+    draws = (own[0] == "presentation" or any(s == "presentation" for s, _ in sides.values())
+             or any(PRESENT_EXTERNS.match(e) for e in externs))
+    logic_calls = [c for c, (s, _) in sides.items() if s == "logic"]
+    state_writes = [w for w in writes if w["logic_readers"]]
+    unknown = [c for c, (s, _) in sides.items() if s == "unknown"]
+    reasons = []
+    if logic_calls:
+        reasons.append(f"calls game logic: {', '.join(_name(con, c) for c in logic_calls[:5])}")
+    if state_writes:
+        reasons.append(f"writes data that logic code reads: {', '.join(w['data'] for w in state_writes[:5])}")
+    if unknown:
+        reasons.append(f"{len(unknown)} of {len(callees)} callees have no label yet")
+    if any(w["how"] == "addr" for w in writes):
+        reasons.append("passes data addresses on, so callees may write through them")
+    touches_logic = bool(logic_calls or state_writes or own[0] == "logic")
+    if draws and touches_logic:
+        verdict = "split"
+    elif touches_logic:
+        verdict = "keep"
+    elif draws and not unknown:
+        verdict = "gut"
+    else:
+        verdict = "unsure"
+    return {
+        "func": _name(con, func), "verdict": verdict, "reasons": reasons,
+        "own_side": {"side": own[0], "why": own[1]},
+        "callers": [_name(con, r["caller"]) for r in con.execute(
+            "SELECT DISTINCT caller FROM calls WHERE callee=? ORDER BY caller", (func,))],
+        "in_tables": [{"table": t["label"], "comment": t["comment"], "slot": i}
+                      for t in con.execute("SELECT label, comment, slots FROM tables")
+                      for i, f in enumerate(json.loads(t["slots"] or "[]")) if f == func],
+        "callees": [{"func": _name(con, c), "side": s, "why": why} for c, (s, why) in sides.items()],
+        "externs": externs,
+        "data_reads": [f"DATA_{d:06d}" for d, how in sorted(access.items()) if how == "read"],
+        "data_writes": writes,
+        "note": "static prediction from beliefs and asm; one level of callees; stores through "
+                "registers (e.g. [esi+0x10]) aren't attributed to a label. A knockout settles it.",
     }
 
 
