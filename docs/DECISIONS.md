@@ -244,7 +244,10 @@ confined to that directory), a `subsystem` view of FFE as a box to cut out
 (entry points, outside calls, shared and private data, member beliefs),
 `cut_check` (for one function: what it reaches, sorted into presentation vs game
 logic by belief, and which data it writes that logic code reads; verdict gut /
-split / keep / unsure, a prediction only a knockout settles), and
+split / keep / unsure, a prediction only a knockout settles), `seam` (ffed3d's
+`EXTERN`s, the asm's calls out to C/C++, with FFE callers and ffed3d's C++ for
+each; Matthew builds on ffed3d's asm because its `C_*` render ports show where
+a modern renderer plugs in), and
 `link`: a proposed FFE <-> Zig connection with a relation and a note.
 *Why a separate table:* how to build the engine is a design choice, not a fact
 about FFE, so links never move beliefs or count as evidence, and Zig code is

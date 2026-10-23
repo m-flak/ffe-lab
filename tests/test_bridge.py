@@ -144,6 +144,42 @@ class TestCutCheck(unittest.TestCase):
         self.assertEqual(br.cut_check(led, 7)["verdict"], "unsure")
 
 
+def make_ffed3d() -> Path:
+    root = Path(tempfile.mkdtemp())
+    (root / "ffe.asm").write_text("EXTERN _C_DrawQuad\nEXTERN _VideoBlit, _AIShipSpawn\nEXTERN DATA_004681\n")
+    (root / "win").mkdir()
+    (root / "win" / "gfx.cpp").write_text(
+        'extern "C" void C_DrawQuad(u16 *p1, int color);\n'          # a declaration: skipped
+        'extern "C" void C_DrawQuad(u16 *p1, int color)\n{\n    Draw(p1);\n}\n'
+        'void other() {\n    C_DrawQuad(0, 1);\n}\n')                # a call: skipped
+    (root / "doc").mkdir()
+    (root / "doc" / "ffed3ddb.c").write_text("int __cdecl C_DrawQuad(int a1)\n{\n}\n")   # decompiler output: skipped
+    return root
+
+
+class TestSeam(unittest.TestCase):
+    def test_list_and_one_symbol(self):
+        led = make_cut_ledger()
+        ff = br.Ffed3d(make_ffed3d())
+        rows = {r["symbol"]: r for r in br.seam(led, ff)}
+        self.assertEqual(set(rows), {"C_DrawQuad", "VideoBlit", "AIShipSpawn", "DATA_004681"})
+        self.assertEqual((rows["C_DrawQuad"]["group"], rows["C_DrawQuad"]["ffe_callers"]), ("render_port", 1))
+        self.assertEqual(rows["VideoBlit"]["group"], "platform")
+        self.assertEqual(rows["AIShipSpawn"]["group"], "game_hook")
+        one = br.seam(led, ff, "_C_DrawQuad")
+        self.assertEqual([c["func"] for c in one["ffe_callers"]], ["FUNC_000005"])
+        self.assertEqual([(d["file"], d["line"]) for d in one["definitions"]], [("win/gfx.cpp", 2)])
+
+    def test_refusals(self):
+        led = make_cut_ledger()
+        with self.assertRaises(ValueError):
+            br.seam(led, None)
+        with self.assertRaises(KeyError):
+            br.seam(led, br.Ffed3d(make_ffed3d()), "NotAnExtern")
+        with self.assertRaises(ValueError):
+            br.Ffed3d(Path(tempfile.mkdtemp()))
+
+
 class TestLinks(unittest.TestCase):
     def test_link_is_a_proposal_outside_the_ledger(self):
         led = make_ledger()

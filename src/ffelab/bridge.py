@@ -12,6 +12,10 @@ Three parts:
 - ``cut_check``: before gutting or modifying a function for the new UI, what it
   reaches (presentation vs game logic), which data it reads and *writes*, and
   whether it looks safe to gut, needs splitting, or should stay.
+- ``seam``: the points where ffed3d's asm calls out to C/C++ (``EXTERN``s): which
+  FFE functions call each one and the C++ that implements it, read from an
+  ffed3d checkout (``FFELAB_FFED3D_ROOT``). This is where the asm hands
+  primitives to a modern renderer, the same place the new engine plugs in.
 - links (the ``bridges`` table): how an FFE function, data label, segment or
   label should meet the Zig code ("Zig ``gfx.drawTri`` replaces FUNC_001616").
   These are design proposals, not findings about FFE: they never touch beliefs,
@@ -359,6 +363,96 @@ def cut_check(ledger: Ledger, func: int, min_prob: float = 0.5) -> dict:
         "data_writes": writes,
         "note": "static prediction from beliefs and asm; one level of callees; stores through "
                 "registers (e.g. [esi+0x10]) aren't attributed to a label. A knockout settles it.",
+    }
+
+
+# ---------------------------------------------------------------- ffed3d seam
+EXTERN_RE = re.compile(r"^\s*EXTERN\s+([\w, ]+)", re.I)
+SEAM_GROUPS = [
+    ("platform", re.compile(r"^(Video|Input|Timer|Sound|Dir)\w+$|^System(Init|Cleanup)$")),
+    ("render_port", re.compile(r"^C_\w+$|^(BlitClipWrapper|FUNC_001874_DrawPlanet|FillAviFrame|ResetAviFrame|"
+                               r"rotateobject)$")),
+    ("libc", re.compile(r"^(abs|atexit|atoi|exit|f\w+|free|malloc|mem\w+|printf|remove|signal|sprintf|sqrt|"
+                        r"str\w+|system|tolower|toupper|vfprintf)$")),
+    ("data", re.compile(r"^DATA_\d+$")),
+]
+C_SOURCES = ("*.c", "*.cpp", "*.h")
+
+
+def seam_group(sym: str) -> str:
+    for group, rx in SEAM_GROUPS:
+        if rx.match(sym):
+            return group
+    return "game_hook"                      # ffed3d's own game-logic replacements (AI, market, spawns, Lua)
+
+
+class Ffed3d:
+    """Read-only view of an ffed3d checkout: its ``EXTERN`` list and C/C++ sources."""
+
+    def __init__(self, root: str | Path):
+        self.root = Path(root).expanduser().resolve()
+        if not (self.root / "ffe.asm").is_file():
+            raise ValueError(f"{self.root} has no ffe.asm: point FFELAB_FFED3D_ROOT at an ffed3d checkout")
+        self._externs: list[str] | None = None
+
+    def externs(self) -> list[str]:
+        """Every symbol ``ffe.asm`` declares ``EXTERN``, without the cdecl underscore."""
+        if self._externs is None:
+            out = set()
+            with (self.root / "ffe.asm").open(errors="replace") as f:
+                for ln in f:
+                    m = EXTERN_RE.match(ln)
+                    if m:
+                        out.update(x.strip().lstrip("_") if not x.strip().startswith("DATA_") else x.strip()
+                                   for x in m.group(1).split(",") if x.strip())
+            self._externs = sorted(out)
+        return self._externs
+
+    def definitions(self, sym: str, body_lines: int = 60) -> list[dict]:
+        """Where the C/C++ defines ``sym``: a line at the left margin (or starting with
+        ``extern "C"``/``inline``/``static``) naming it with ``(`` and not ending in ``;``.
+        ``doc/`` (Hex-Rays output of the original exe) is skipped: it isn't ffed3d's code."""
+        rx = re.compile(rf"^(?:extern\s+\"C\"\s+|inline\s+|static\s+)?[A-Za-z_][\w\s\*]*\b{re.escape(sym)}\s*\(")
+        out = []
+        for pat in C_SOURCES:
+            for p in sorted(self.root.rglob(pat)):
+                rel = p.relative_to(self.root)
+                if rel.parts[0] == "doc" or p.stat().st_size > 4 * MAX_FILE:
+                    continue
+                lines = p.read_text(errors="replace").splitlines()
+                for n, ln in enumerate(lines):
+                    if rx.match(ln) and not ln.rstrip().endswith(";"):
+                        out.append({"file": str(rel), "line": n + 1,
+                                    "code": "\n".join(lines[n:n + body_lines])})
+        return out
+
+
+def seam(ledger: Ledger, ffed3d: Ffed3d | None, symbol: str | None = None, body_lines: int = 60) -> list | dict:
+    """No ``symbol``: every extern with its group and how many FFE functions call it
+    (0: declared but unused by the asm; ffed3d's C calls it itself). With one (``C_DrawTriangle`` or ``_C_DrawTriangle``): its callers and its C++."""
+    if ffed3d is None:
+        raise ValueError("no ffed3d checkout configured: set FFELAB_FFED3D_ROOT")
+    con = ledger.con
+    funcs = [(r["num"], r["asm_text"] or "") for r in con.execute("SELECT num, asm_text FROM functions ORDER BY num")]
+
+    def callers(sym: str) -> list[int]:
+        token = sym if sym.startswith("DATA_") else "_" + sym
+        rx = re.compile(rf"(?<![\w]){re.escape(token)}\b")
+        return [n for n, asm in funcs if rx.search(asm)]
+
+    if symbol is None:
+        rows = [{"symbol": s, "group": seam_group(s), "ffe_callers": len(callers(s))} for s in ffed3d.externs()]
+        return sorted(rows, key=lambda r: (r["group"], -r["ffe_callers"], r["symbol"]))
+    sym = symbol.strip().lstrip("_") if not symbol.strip().startswith("DATA_") else symbol.strip()
+    if sym not in ffed3d.externs():
+        raise KeyError(f"{symbol} is not an EXTERN in ffe.asm")
+    cs = callers(sym)
+    return {
+        "symbol": sym, "group": seam_group(sym),
+        "ffe_callers": [{"func": _name(con, f), "side": side(ledger, f)[0]} for f in cs],
+        "definitions": [] if sym.startswith("DATA_") else ffed3d.definitions(sym, body_lines),
+        "note": "ffed3d's C++ is a guide, not a spec: some ports are machine-decompiled and buggy "
+                "(PLAN: C_FUNC_001869's sign bug). Where it disagrees with the asm, the asm wins.",
     }
 
 

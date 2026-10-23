@@ -137,11 +137,13 @@ decide how the two fit together.
 |---|---|
 | `subsystem(spec)` | an FFE subsystem (`seg:12`, `render`, `render/planet`) as a box to cut out: members and their belief, **entry points** called from outside (its real API, a first draft of the Zig interface), what it calls outside itself, **shared data** (coupling to design around) and private data (can become Zig-owned state) |
 | `cut_check(func)` | before gutting or changing one function: callers and event-table slots, callees sorted into presentation / logic / neutral / unknown, externs it calls, data it reads, data it **writes** and which game-logic functions read those. Verdict `gut` (drawing only), `split` (draws *and* touches game logic or state: move the logic out first), `keep` (logic), `unsure` (too much unlabelled) |
+| `seam(symbol?)` | needs `"FFELAB_FFED3D_ROOT"` (an ffed3d checkout). Where the asm calls out to C/C++: every `EXTERN` with its group (`platform`: the JJFFE `ffeapi.h` layer; `render_port`: the `C_*` draw and planet ports, where the asm hands primitives to a renderer; `game_hook`: ffed3d's logic replacements; `libc`; `data`) and caller count, or for one symbol its FFE callers and ffed3d's C++. The C++ is a guide to how rendering works, not a spec: some ports are machine-decompiled and buggy, and where they disagree with the asm, the asm wins |
 | `zig_tree`, `zig_read`, `zig_grep`, `zig_outline` | the engine's source, read only, confined to the root; `.zig-cache` and `zig-out` skipped |
 | `link(ffe, zig, relation, note)` | propose how an FFE piece meets the Zig code |
 | `links(...)` | the proposals so far and where Matthew stands on them |
 
-CLI: `ffelab research subsystem SPEC`, `ffelab research cut-check FUNC`, `ffelab research link FFE ZIG RELATION
+CLI: `ffelab research subsystem SPEC`, `ffelab research cut-check FUNC`,
+`ffelab research seam [SYMBOL] [--ffed3d DIR]`, `ffelab research link FFE ZIG RELATION
 --note TEXT [--zig-root DIR]`, `ffelab bridge list`, and (Matthew only)
 `ffelab bridge status ID accepted|in_progress|done|rejected`.
 
@@ -156,11 +158,13 @@ constant that must match FFE's layout or values).
    uncertain: say so before designing around it.
 2. Entry points are what the Zig side must call or provide; shared data is
    what both sides touch and needs one owner.
-3. Read the Zig code that would meet it (`zig_grep`, `zig_outline`).
-4. Before any `stubs` link, run `cut_check` on the function. `split` means
+3. For rendering, `seam` on the `render_port` externs it reaches shows the
+   primitives the asm hands over and how ffed3d drew them.
+4. Read the Zig code that would meet it (`zig_grep`, `zig_outline`).
+5. Before any `stubs` link, run `cut_check` on the function. `split` means
    say what logic has to move and where; `unsure` means say what's unlabelled
    instead of guessing. The verdict is a static prediction: a knockout settles it.
-5. Propose `link`s, one per seam, each with a note saying what changes on
+6. Propose `link`s, one per seam, each with a note saying what changes on
    which side. Give the overall recommendation to Matthew in prose.
 
 **Rules:**

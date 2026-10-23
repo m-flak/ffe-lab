@@ -3,7 +3,8 @@ write claims only. Protocol: ``docs/STATIC_RESEARCH.md``.
 
 Run:  FFELAB_DB=ffe.db FFELAB_SOURCE=ai:muse python -m ffelab.mcp_research
 
-With ``FFELAB_ZIG_ROOT=/path/to/engine`` the researcher can also read the new
+With ``FFELAB_FFED3D_ROOT=/path/to/ffed3d`` it can trace the asm's calls out to
+ffed3d's C++ (``seam``). With ``FFELAB_ZIG_ROOT=/path/to/engine`` the researcher can also read the new
 Zig engine (read only, confined to that directory) and propose links between it
 and FFE. Links are design proposals in their own table, never evidence.
 
@@ -35,6 +36,7 @@ if not SOURCE.startswith("ai:"):
 mcp = FastMCP("ffelab-research")
 _ledger = Ledger(on_db_thread(dbmod.connect, os.environ.get("FFELAB_DB", "ffe.db")))   # used only on the tool thread
 _zig = br.ZigRepo(os.environ["FFELAB_ZIG_ROOT"]) if os.environ.get("FFELAB_ZIG_ROOT") else None
+_ffed3d = br.Ffed3d(os.environ["FFELAB_FFED3D_ROOT"]) if os.environ.get("FFELAB_FFED3D_ROOT") else None
 
 
 def _refusing(fn, *args, **kwargs):
@@ -119,6 +121,15 @@ def cut_check(func: str, min_prob: float = 0.5) -> dict:
     (and who in game logic reads those). Verdict gut | split | keep | unsure, a static
     prediction a knockout settles. Check this before proposing a ``stubs`` link."""
     return _refusing(lambda: br.cut_check(_ledger, rs.func_num(func), min_prob))
+
+
+@tool(mcp)
+def seam(symbol: str | None = None) -> list | dict:
+    """Where ffed3d's asm calls out to C/C++ (needs FFELAB_FFED3D_ROOT). No symbol: every
+    EXTERN with its group (platform, render_port, game_hook, libc, data) and caller count.
+    A symbol (``C_DrawTexTriangleDet``): the FFE functions that call it and ffed3d's C++
+    for it. The render_port group is where the asm hands primitives to a renderer."""
+    return _refusing(br.seam, _ledger, _ffed3d, symbol)
 
 
 # ---------------------------------------------------------------- the Zig engine (read only)
