@@ -61,6 +61,7 @@ FFED3D_DIR=../ffed3d python -m pytest       # also runs the real-data test
 | `python -m ffelab.mcp_server` | The MCP server agents use |
 | `python -m ffelab.mcp_research` | A claims-only MCP server for an outside researcher (read tools plus `claim`) |
 | `python3 tools/meshwalk.py all --src DIR` | Dump the game's meshes as OBJ files (stdlib only; see `docs/ASSET_FORMATS.md`) |
+| `python3 tools/texdump.py all --src DIR` | Dump the game's bitmaps/textures as PNG files (stdlib only; see `docs/ASSET_FORMATS.md`) |
 
 ## Modules
 

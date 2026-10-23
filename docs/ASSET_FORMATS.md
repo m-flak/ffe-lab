@@ -3,7 +3,8 @@
 How the game's art lives in the ffed3d asm, and how to get it out. All of this
 was recovered from `ffe.asm` / `ffebmp.asm` / `ffedat.asm` plus the C++ side in
 `win/` — no game copy needed. Regenerate everything with
-`python3 tools/meshwalk.py all` (meshes; bitmaps: see below).
+`python3 tools/meshwalk.py all` (meshes) and `python3 tools/texdump.py all`
+(bitmaps/textures).
 
 ## Bitmaps (sprites, panels, FX, textures)
 
@@ -21,6 +22,12 @@ was recovered from `ffe.asm` / `ffebmp.asm` / `ffedat.asm` plus the C++ side in
   `FUNC_001805`/`FUNC_001807` (unidentified "material-palette builders").
 - Palette is set at runtime through the VGA DAC (`DPalSet`); static dumps
   are grayscale. True color needs palette recovery.
+- `tools/texdump.py` exports all 357 as PNGs: texel 0 is magenta (the
+  mask) on masked (flags&1) images and the opaque darkest shade
+  otherwise, and values are scaled per image to 0–255 so the 3-bit shade
+  texels read as visible gray levels instead of near-black. Records are
+  dword-padded; indices 94/95 are 64×512 planet strips (height byte
+  reads 0).
 
 ## Meshes (465 models — not all ships)
 
@@ -76,6 +83,38 @@ was recovered from `ffe.asm` / `ffebmp.asm` / `ffedat.asm` plus the C++ side in
 - Verification caveat: this dump code may be wrong. Nothing here has been
   checked against the game itself yet. Before trusting any model, play the
   game and compare the OBJ against what is actually rendered.
+
+## Fonts and text (four systems, not one)
+
+- Small UI font — the workhorse for all 2D text (panels, menus, dialogs,
+  HUD): 1bpp proportional, 10 bytes/char (`[9 rows, MSB-left][advance]`)
+  at `DATA_007750` in `ffedat.asm`, 116 chars covering 0x20–0x93 (full
+  ASCII plus accented lowercase for localization and a few symbols).
+  Rendered by `FUNC_001598_DrawChar` via the `TextWrite*` / `StringDraw*` /
+  `DrawShadowedChar` families. String control codes: `0x1` color,
+  `0xd` newline, `0x1e`/`0x1f` position, `0x0` inline bitmap-by-index.
+  Hand quirks: rectangular `A` (flat top, vertical sides), `4`/`7` with
+  vertical stems — no standard font reproduces these.
+- Big display glyphs: bitmap indices 292–326 = `A`–`Z` + `1`–`9`
+  (labels run in reverse, `DATA_008032`–`DATA_007998`); 64×64 masked 3-bit
+  shaded sprites, no zero (`O` doubles for it). Every glyph fills its
+  square tile (~1.0em wide, all 35). Referenced only through the index
+  table via computed indices — exact call site untraced, most likely
+  title/logo/header lettering.
+- Mesh vector fonts: models 0/1/2 = `VectorFont` / `GraphicsFont` /
+  `TimesFont` (Jongware's `ShowMesh.txt`), per-character sub-models drawn
+  by the `0x0A` Text opcode (`[ebx + char*4 - 0x40]`). 153 vector-font
+  vs 57 Times-font uses in the dumped models; `GraphicsFont` unused there.
+- Floating 3D labels use the *small* font: `0x12 DisplayText` defers to
+  `FUNC_001812`, which just calls `FUNC_001583_TextWriteDefaultColor`.
+- FOSS lookalikes (pixel-compared against installed references): small →
+  **DejaVu Sans** (Verdana won on overlap, shape and width correlation);
+  big → **Liberation Sans Bold** (Arial skeleton: pointed `A`, plain arms,
+  straight-leg `R`) stretched ~120–135% horizontally with a top-lit bevel
+  (the stretch also reproduces the vertical-heavy stroke contrast).
+  Unmatched anywhere: the small font's rectangular `A`/`4`/`7`, the big
+  face's slab feet on stems. Compare at a 5:6 horizontal squeeze — the art
+  is drawn ~1.2× wide for 320×200-on-4:3 pixels.
 
 ## For the rewrite
 
